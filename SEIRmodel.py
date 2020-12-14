@@ -56,6 +56,9 @@ global time_dep_soc
 global randomIndex
 randomIndex = '001'
 
+global filenameCaseData
+filenameCaseData = 'test.csv'
+
 
 ### MAIN #####_##################################################################
 
@@ -442,10 +445,9 @@ def run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID,
     print(par_list)
 
     # Fit (optionally with uncertainty in data)
-    result = []
-    fit = []
+    result  = []
+    fit     = []
     data_in = [data_trn]
-    t_in = [t_trn]
     if uncert:
 
         # Fit (optionally with uncertainty in data)
@@ -605,8 +607,7 @@ def run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID,
 
     else:
         # fit model
-        result_i, t_i, fit_i = fit_general(model, par_list, data_trn, bnds, fixed_pars, adm0, t_trn, t_tst,
-                                           neigh, alpha_fix)
+        result_i, t_i, fit_i = fit_general(par_list, data_trn, bnds, fixed_pars, adm0, t_trn, t_tst)
         result.append(result_i)
         fit.append(fit_i)
         print(result_i.x)
@@ -635,8 +636,7 @@ def run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID,
 
 
 # Load data
-def setup_ILGE(lvl, coupled, local, t_meas, n_tst, start, end, mode, quarter, model, neigh, useSoc, loadFr_dyn,
-               usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc, useUnrepor, delta_t):
+def setup_ILGE(n_tst, start, end, quarter, n_splitsSoc, delta_t):
     """Does the general setup based on user input.
 
     Parameters
@@ -665,73 +665,24 @@ def setup_ILGE(lvl, coupled, local, t_meas, n_tst, start, end, mode, quarter, mo
     """
     # number of compartments, 5 for S, E, I, R, D
 
-    n_adm = len(quarter)
-    if model == 'SEAIRD':
-        n_cmp = 8
-    elif model == 'SEUI':
-        if useUnrepor:
-            if useReortingDelay:
-                n_cmp = 7
-            else:
-                n_cmp = 6
-        else:
-            n_cmp = 4
-    else:
-        raise ('Invalid ODE model')
+    n_cmp = 6       # Number of compartments
 
-    # obtain Social adjacency matrix
-    ASoc = 0
-    if lvl == 0:
-        ASoc = 0
-    elif lvl == 1:
-        if useSoc:
-            if mode == 'a':  # all admin1 analyzed jointly
-                if coupled:
-                    ASoc = obtain_SocAdjacencyILGE(quarter)
-                else:
-                    ASoc = 0
-            elif mode == 's':  # a single adm1 analyzed
-                ASoc = 0
-        else:
-            ASoc = 0
 
-    # get mobility time dependece
-    if loadFr_dyn:
+    # Get mobility time dependece
+    # Load time searies - starts on 1.2.2020
+    df_timedep = pd.read_csv(os.path.join(wd, 'output', 'bs_full_traffic_model_timeseries.csv'))
+    n_travelling = df_timedep['total'].values[:-2]
 
-        # Load time searies - starts on 1.2.2020
-        df_timedep = pd.read_csv(os.path.join(wd, 'output', 'bs_full_traffic_model_timeseries.csv'))
-        n_travelling = df_timedep['total'].values[:-2]
+    # Get the correct time frame and normalize by median number of travellers in Feb 2020
+    # Starting 6.2. - relative to 7.3.
+    time = 7 * df_timedep.index.values[:-2] - 30 + delta_t
+    time_dep = UnivariateSpline(time, n_travelling)
+    time_dep.set_smoothing_factor(0.0001)
 
-        # Get the correct time frame and normalize by median number of travellers in Feb 2020
-        # fraction = n_travelling[35-delta_t:]/np.median(n_travelling[:28])
-
-        # Starting 6.2. - relative to 7.3.
-        time = 7 * df_timedep.index.values[:-2] - 30 + delta_t
-        # time_dep = interp1d(time, n_travelling)
-
-        time_dep = UnivariateSpline(time, n_travelling)
-        time_dep.set_smoothing_factor(0.0001)
-
-        # Plot
-        # t = np.linspace(-20, 50)
-        # plt.figure()
-        # plt.scatter(time, n_travelling, label = 'Data')
-        # plt.plot(t,time_dep(t),label = 'Linear interpolation')
-        # spl.set_smoothing_factor(0.5)
-        # plt.plot(t, spl(t), label='Smooth spline 0.5')
-        # spl.set_smoothing_factor(0.01)
-        # plt.plot(t, spl(t), label='Smooth spline 0.01')
-        # spl.set_smoothing_factor(0.005)
-        # plt.plot(t, spl(t), label='Smooth spline 0.005')
-        # plt.legend()
-
-    else:
-        time_dep = 0
-
-    # Get social time series
-    df_Kalman = pd.read_csv(os.path.join(wd, 'kalman', 'bs_kalman_Reff.csv'))
-    time_Kalman = np.arange(0, 57)  # df_Kalman['timestamp'].values
-    R_estimate = df_Kalman['R_estimate'].values
+    # Social interaction
+    df_Kalman    = pd.read_csv(os.path.join(wd, 'kalman', 'bs_kalman_Reff.csv'))
+    time_Kalman  = np.arange(0, 57)  # df_Kalman['timestamp'].values
+    R_estimate   = df_Kalman['R_estimate'].values
 
     if delta_t != 10:
         R_estimate = np.array(list(R_estimate[0] * np.ones(delta_t - 10, )) + list(R_estimate))
@@ -740,77 +691,22 @@ def setup_ILGE(lvl, coupled, local, t_meas, n_tst, start, end, mode, quarter, mo
     alpha_mob = time_dep(time_Kalman)
     y_Kalman = R_estimate / alpha_mob
     y_soc = y_Kalman / np.max(y_Kalman)
-    # y_soc = y_kalman/alpha_mob
-
     global time_dep_soc
     time_dep_soc = UnivariateSpline(time_Kalman, y_soc, s=0.03)
 
-    tmin = 51
-    stretch = 0.
-    dates = np.array(pd.date_range(start, end))
-    ts = pd.to_datetime(dates)
-    dates = ts.strftime('%m.%d').values
-    ticks = np.arange(min(np.arange(0, 61)), max(np.arange(0, 61)), 7)
-    int_ticks = [int(i) for i in ticks]
-
-    fig1 = plt.figure(figsize=(3, 3))
-    ax = fig1.add_subplot()
-    plt.plot(time_Kalman, R_estimate, label='estimated R', color='teal')
-    plt.plot(time_Kalman, y_Kalman, label='R/' + r'$\alpha_{mob}$', color='darkblue')
-    plt.plot(time_Kalman, y_soc, '--', label='Normalized', color='black', zorder=3)
-    plt.plot(np.arange(0, 61), stretchFun(np.arange(0, 61), tmin, stretch), label='Smoothend', color='red')
-    plt.ylabel('Social Interaction Score', fontsize=10)
-    ax.set_xticks(ticks)
-    plt.yticks(fontsize=8)
-    ax.set_xticklabels(dates[int_ticks], rotation=45, fontsize=8)
-    plt.legend(frameon=False, loc="upper right", fontsize=8)
-    plt.tight_layout()
-
-    fig1 = plt.figure(figsize=(3, 3))
-    ax = fig1.add_subplot()
-    # plt.plot(np.arange(0, 61), time_dep_soc(np.arange(0, 61)), label = '')
-    plt.plot(time_Kalman, alpha_mob, label='Mobility time series', color='teal')
-    plt.ylabel('Mobility Interaction Score')
-    plt.yticks(fontsize=10)
-    ax.set_xticks(ticks)
-    ax.set_xticklabels(dates[int_ticks], rotation=45, fontsize=10)
-    plt.tight_layout()
-
-    df_mobility = pd.DataFrame(data=np.array([time_Kalman, alpha_mob]).T, index=dates, columns=['time', 'alpha_mob'])
-    df_mobility.to_csv(os.path.join(wd, 'Data', 'alpha_mob.csv'))
-
-    df_soc = pd.DataFrame(data=np.array([time_Kalman, stretchFun(np.arange(0, 61), tmin, stretch),
-                                         y_soc, y_Kalman, R_estimate]).T, index=dates,
-                          columns=['time', 'alpha_soc', 'R/alpha_mob norm', 'R/alpha_mob', 'R_kalman'])
-    df_soc.to_csv(os.path.join(wd, 'Data', 'alpha_soc.csv'))
 
     # parse the input data to the right format
     t_trn, t_tst, data_trn, data_tst, pop, data_trn_abs = \
         obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc)
 
     # obtain adjacency matrix and number of admin areas analyzed
-    A = 0
-    if lvl == 0:
-        A = 0
-    elif lvl == 1:
-        if mode == 'a':  # all admin1 analyzed jointly
-            if coupled:
+    A = obtain_adjacencyILGE(quarter, neigh, n_splitsSoc)
 
-                if useSymMat:
-                    A = obtain_adjacencyILGE(quarter, neigh, n_splitsSoc)
-                else:
-                    A = obtain_adjacencyILGE_NormRow(quarter, neigh, n_splitsSoc, pop)
-            else:
-                A = 0
-        elif mode == 's':  # a single adm1 analyzed
-            A = 0
-
-    plt.close('all')
 
     return n_cmp, A, n_adm, t_trn, t_tst, data_trn, data_tst, pop, ASoc, time_dep, data_trn_abs
 
 
-def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc):
+def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, n_splitsSoc):
     """Obtains the dataset in the right format to be passed to optimizer.
 
     Parameters
@@ -833,24 +729,14 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingSt
     # allocation
     data_inf_trn = np.array([])
     data_inf_trn_cum = np.array([])
-    data_fat_trn = np.array([])
     data_inf_tst = np.array([])
     data_inf_tst_cum = np.array([])
-    data_fat_tst = np.array([])
-    measures = []
     pop = []
 
     for j, c in enumerate(quarter):
         print(c)
 
-        if localMac:
-            data, subpop = load_local_data_ILGElocal(c, start, end, usePangolin, pangolingStrain, mergeQuatSoc,
-                                                     n_splitsSoc)
-        else:
-            data, subpop, baselstrain, sequenced, posCases, t_poscases = load_local_data_ILGE(c, start, end,
-                                                                                              usePangolin,
-                                                                                              pangolingStrain,
-                                                                                              mergeQuatSoc, n_splitsSoc)
+        data, subpop = load_data(c, start, end)
 
         if j == 0:
             if (n_tst > data[0][-1]):
@@ -858,7 +744,6 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingSt
             t_trn = data[0][:n_tst]
             t_tst = data[0][n_tst:]
 
-        # measures.append(t_meas)# for now we use a global measure
         pop.append(subpop)
 
         # data (1st column is time, the rest are dead and infected, in couples)
@@ -866,24 +751,18 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingSt
         data_inf_tst_cum = np.concatenate((data_inf_tst_cum, data[2][n_tst:]))
         data_inf_trn = np.concatenate((data_inf_trn, data[3][:n_tst]))
         data_inf_tst = np.concatenate((data_inf_tst, data[3][n_tst:]))
-        # data_fat_tst = np.concatenate((data_fat_tst, data[1][n_tst:]))
-        # data_fat_trn = np.concatenate((data_fat_trn, data[1][:n_tst]))
+
 
     # training data: first row is time, then cummulative number of cases
     inf_trn = data_inf_trn.reshape(n_adm, len(t_trn))
     inf_trn_cum = data_inf_trn_cum.reshape(n_adm, len(t_trn))
-    # fat_trn = data_fat_trn.reshape(n_adm, len(t_trn))
 
     # test data
     inf_tst = data_inf_tst.reshape(n_adm, len(t_tst))
-    # fat_tst = data_fat_tst.reshape(n_adm, len(t_tst))
 
-    # the actual dataset used for the fit: each column is an adm area.
-    # data_trn = np.concatenate((t_trn[None, :], inf_trn, fat_trn), axis=0)
-    # data_tst = np.concatenate((t_tst[None, :], inf_tst, fat_tst), axis=0)
 
     # Impute missing data for the 29, 30, 31 of march
-    inds_missing = [36, 37, 38]
+    inds_missing  = [36, 37, 38]
     inds_forRatio = [33, 34, 35, 19, 40, 41]
     ratioT = (inf_trn_cum / np.sum(inf_trn_cum, axis=0))[:, inds_forRatio].mean(axis=1)
     ind36 = np.where(t_poscases == 36)[0][0]
@@ -894,1545 +773,208 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingSt
             inf_trn_imp[q_rep, i_miss] = cases[counter] * ratioT[q_rep]
 
     # 7 day average
-    if use7DayAV:
-        inf_trn_cum7av = np.zeros(inf_trn_imp.shape)
-        inf_trn_7av = np.zeros(inf_trn_imp.shape)
-        inf_trn_cum7av_noImp = np.zeros(inf_trn_imp.shape)
-        inf_trn_7av_noImp = np.zeros(inf_trn_imp.shape)
-        for q in range(0, n_adm):
-            this_inf_trn = inf_trn_imp[q, :]
-            this_inf_trn_noImp = inf_trn[q, :]
-            y_inf_new_7av = np.zeros(this_inf_trn.shape)
-            y_inf_new_7av_noImp = np.zeros(this_inf_trn.shape)
-            for d in range(0, len(this_inf_trn)):
-                ind = np.arange(d - 3, d + 4)
-                ind_use = ind[np.logical_and(ind >= 0, ind < len(this_inf_trn))]
-                y_inf_new_7av[d] = np.mean(np.array(this_inf_trn)[ind_use])
-                y_inf_new_7av_noImp[d] = np.mean(np.array(this_inf_trn_noImp)[ind_use])
-            y_inf_7av = np.cumsum(y_inf_new_7av)
-            y_inf_7av_noImp = np.cumsum(y_inf_new_7av_noImp)
+    inf_trn_cum7av = np.zeros(inf_trn_imp.shape)
+    inf_trn_7av = np.zeros(inf_trn_imp.shape)
+    inf_trn_cum7av_noImp = np.zeros(inf_trn_imp.shape)
+    inf_trn_7av_noImp = np.zeros(inf_trn_imp.shape)
+    for q in range(0, n_adm):
+        this_inf_trn = inf_trn_imp[q, :]
+        this_inf_trn_noImp = inf_trn[q, :]
+        y_inf_new_7av = np.zeros(this_inf_trn.shape)
+        y_inf_new_7av_noImp = np.zeros(this_inf_trn.shape)
+        for d in range(0, len(this_inf_trn)):
+            ind = np.arange(d - 3, d + 4)
+            ind_use = ind[np.logical_and(ind >= 0, ind < len(this_inf_trn))]
+            y_inf_new_7av[d] = np.mean(np.array(this_inf_trn)[ind_use])
+            y_inf_new_7av_noImp[d] = np.mean(np.array(this_inf_trn_noImp)[ind_use])
+        y_inf_7av = np.cumsum(y_inf_new_7av)
+        y_inf_7av_noImp = np.cumsum(y_inf_new_7av_noImp)
 
-            inf_trn_cum7av[q, :] = y_inf_7av
-            inf_trn_7av[q, :] = y_inf_new_7av
-            inf_trn_cum7av_noImp[q, :] = y_inf_7av_noImp
-            inf_trn_7av_noImp[q, :] = y_inf_new_7av_noImp
+        inf_trn_cum7av[q, :] = y_inf_7av
+        inf_trn_7av[q, :] = y_inf_new_7av
+        inf_trn_cum7av_noImp[q, :] = y_inf_7av_noImp
+        inf_trn_7av_noImp[q, :] = y_inf_new_7av_noImp
 
-    # Plot
-    dates = np.array(pd.date_range(start, end))
-    ts = pd.to_datetime(dates)
-    dates = ts.strftime('%d %b').values
-    t = list(t_trn) + list(t_tst)
-    ticks = np.arange(min(t_trn) + 2, max(t), 7)
-    int_ticks = [int(i) for i in ticks]
-
-    cmap = cmx.get_cmap("Spectral")
-    fig1 = plt.figure(figsize=(6, 6))
-    ax = fig1.add_subplot(1, 1, 1)
-    plt.plot(t_trn, inf_trn_7av[0, :], color='seagreen', label='T1 imputed')
-    plt.plot(t_trn, inf_trn_7av[1, :], color='crimson', label='T2 imputed')
-    plt.plot(t_trn, inf_trn_7av[2, :], color='blue', label='T3 imputed')
-    plt.plot(t_trn, inf_trn_7av_noImp[0, :], '--', color='seagreen', label='T1')
-    plt.plot(t_trn, inf_trn_7av_noImp[1, :], '--', color='crimson', label='T2')
-    plt.plot(t_trn, inf_trn_7av_noImp[2, :], '--', color='blue', label='T3')
-    ax.set_xticks(ticks)
-    plt.yticks(fontsize=16)
-    ax.set_xticklabels(dates[int_ticks], rotation=45, fontsize=16)
-    plt.legend(prop={'size': 14}, frameon=False, loc="upper left")
-    plt.yticks(fontsize=10)
-    plt.xticks(fontsize=10)
-    plt.ylabel('Number of Cases', fontsize=16)
-    ax.patch.set_facecolor('lightgrey')
-    plt.grid(color='white')
-    plt.tight_layout()
-
-    if useImputation:
-        data_trn = np.concatenate((t_trn[None, :], inf_trn_cum7av), axis=0)
-        data_tst = np.concatenate((t_tst[None, :], inf_tst), axis=0)
-        data_trn_abs = np.concatenate((t_trn[None, :], inf_trn_7av), axis=0)
-
-        # Save
-        time_imp = data_trn[0, :]
-        count_abs1 = data_trn_abs[1, :]
-        count_abs2 = data_trn_abs[2, :]
-        count_abs3 = data_trn_abs[3, :]
-        count_cum1 = data_trn[1, :]
-        count_cum2 = data_trn[2, :]
-        count_cum3 = data_trn[3, :]
-
-        df_dataTrain = pd.DataFrame(
-            list(zip(time_imp, count_abs1, count_abs2, count_abs3, count_cum1, count_cum2, count_cum3)),
-            columns=['time', 'count_abs1', 'count_abs2', 'count_abs3', 'count_cum1', 'count_cum2', 'count_cum3'])
-
-        df_dataTrain.to_csv(os.path.join(wd, 'Data', 'imputedBaselStrain.csv'))
-
-        df_liv = pd.read_csv(os.path.join(wd, 'Data', 'imputedBaselStrainLivingSpace.csv'))
-        df_sen = pd.read_csv(os.path.join(wd, 'Data', 'imputedBaselStrain1PHouseholds.csv'))
-        df_1P = pd.read_csv(os.path.join(wd, 'Data', 'imputedBaselStrainSENIOR_ANT.csv'))
-        df_med = pd.read_csv(os.path.join(wd, 'Data', 'imputedBaselStrainMedianIncome2017.csv'))
-
-        # Read all data and compare
-        df_allPartitions = pd.DataFrame(df_dataTrain['time'].copy())
-        df_allPartitions['MedInc_abs'] = df_med['count_abs1'] + df_med['count_abs2'] + df_med['count_abs3']
-        df_allPartitions['Liv_abs'] = df_liv['count_abs1'] + df_liv['count_abs2'] + df_liv['count_abs3']
-        df_allPartitions['1P_abs'] = df_1P['count_abs1'] + df_1P['count_abs2'] + df_1P['count_abs3']
-        df_allPartitions['Sen_abs'] = df_sen['count_abs1'] + df_sen['count_abs2'] + df_sen['count_abs3']
-
-        df_allPartitions['MedInc_cum'] = df_med['count_cum1'] + df_med['count_cum2'] + df_med['count_cum3']
-        df_allPartitions['Liv_cum'] = df_liv['count_cum1'] + df_liv['count_cum2'] + df_liv['count_cum3']
-        df_allPartitions['1P_cum'] = df_1P['count_cum1'] + df_1P['count_cum2'] + df_1P['count_cum3']
-        df_allPartitions['Sen_cum'] = df_sen['count_cum1'] + df_sen['count_cum2'] + df_sen['count_cum3']
-        df_allPartitions.to_csv(os.path.join(wd, 'Data', 'imputedBaselStrain_All.csv'))
-
-
-
-
-
-
-    else:
-        data_trn = np.concatenate((t_trn[None, :], inf_trn_cum7av_noImp), axis=0)
-        data_tst = np.concatenate((t_tst[None, :], inf_tst), axis=0)
-        data_trn_abs = np.concatenate((t_trn[None, :], inf_trn_7av_noImp), axis=0)
+    data_trn = np.concatenate((t_trn[None, :], inf_trn_cum7av), axis=0)
+    data_tst = np.concatenate((t_tst[None, :], inf_tst), axis=0)
+    data_trn_abs = np.concatenate((t_trn[None, :], inf_trn_7av), axis=0)
 
     return t_trn, t_tst, data_trn, data_tst, pop, data_trn_abs
 
 
-def load_local_data_ILGElocal(the_quarter, start, end, usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc):
+def load_data(the_quarter, start, end):
     '''
     Parameters
     ----------
     the_quarter  : the areas of interest, may be 'all'
-    start      : start date of analysis
-    end        : end date of analysis
+    start        : start date of analysis
+    end          : end date of analysis
 
     Returns
     --------
-    data matrix with time, n_fats, infected; and population for selected areas
-    '''
+    data matrix with time, n_infected; and population for selected areas
 
-    if mergeQuatSoc:
-
-        # read csv files for cases
-        # os.chdir('/project/data/20200722T103018/content/')#20200528T091303/content/epiData')
-        os.chdir('/Users/sbrueningk/Desktop/ILGE_Data/')
-        filename = os.path.join(wd, 'Data',
-                                'data.csv')  # 'EpiData_ETH_complete_20200720_extern.xlsx' #'EpiData_ETH_censor_20200515.xlsx'
-        # df = pd.read_excel(filename, 'positive')
-        df = pd.read_csv(filename)
-        # df_neg = pd.read_excel(filename, 'negative')
-        os.chdir(wd)
-
-        # fill in data for Riehen and Bettingen
-        # df.Quarters.fillna(df.Ortschaft, inplace = True)
-
-        # restrict to dates greater than starting date
-        df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-        df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-        START = df['ENTNAHMEDATUM'] >= start
-        END = df['ENTNAHMEDATUM'] <= end
-        df = df[START & END]
-        tmp = (df['ENTNAHMEDATUM'] - start)
-        df['DELTA'] = tmp.astype('timedelta64[D]')
-        t = np.arange(df['DELTA'].max() + 1)  # np.array(np.unique(df['DELTA']))
-
-        # # Get socioeconomic data
-        os.chdir(os.path.join(wd, 'geodata'))
-        filename = 'SocioeconomicScore_data.csv'
-        pop_df = pd.read_csv(filename)
-        os.chdir(wd)
-
-        if useNaturalBreaks:
-            name_suffix = 'natural_breaks'
-        else:
-            name_suffix = 'percentiles'
-        os.chdir(os.path.join(wd, 'graphs'))
-        if useForTiles == 'MedianIncome2017':
-            filename = 'bs_MedianIncome2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-        elif useForTiles == 'CoHab_index':
-            filename = 'bs_CohabProxIndex_' + str(n_splitsSoc) + name_suffix + '.csv'
-        elif useForTiles == 'SENIOR_ANT':
-            filename = 'bs_SENIOR_ANT_' + str(n_splitsSoc) + name_suffix + '.csv'
-        elif useForTiles == 'LivingSpace':
-            filename = 'bs_Living_space_per_Person_2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-        elif useForTiles == '1PHouseholds':
-            filename = 'bs_1PHouseholds_' + str(n_splitsSoc) + name_suffix + '.csv'
-        elif useForTiles == 'random':
-            filename = 'bs_random_' + str(n_splitsSoc) + 'tiles_' + randomIndex + '.csv'
-        else:
-            filename = 'bs_' + useForTiles + '_' + str(n_splitsSoc) + name_suffix + '.csv'
-        soc_df = pd.read_csv(filename)
-        os.chdir(wd)
-
-        if the_quarter == 'all':
-            raise ('The option all is not supported for splitting according to living space')
-        else:
-
-            # Get total number of inhabitants
-            os.chdir(os.path.join(wd, 'geodata'))
-            filename = 'bs_quarter_mapping_all.csv'
-            pop_tot_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            # For each tile get the blocks and population
-            blocks = soc_df['BLO_ID'].loc[soc_df['percentile'] == the_quarter].values
-
-            # Split according to living space
-            pop_df_nan = pop_df.dropna(axis=0)
-            if the_quarter == 0:
-
-                # # Use NaNs
-                # blocks = pop_df['BlockID'].loc[pop_df['Living space per Person 2017'].isnull()].values
-                # pop = pop_tot_df['POPULATION'].sum() - pop_df_nan['Population 2017'].sum()
-
-                otherBlocks = soc_df['BLO_ID'].loc[soc_df['percentile'] != the_quarter].values
-                pop = pop_tot_df['POPULATION'].sum() - pop_df['Population 2017'].loc[
-                    pop_df['BlockID'].isin(otherBlocks)].sum()
-            else:
-                # if the_quarter == n_splitsSoc:
-                #     cutoff_up = max(pop_df['Living space per Person 2017'])
-                # else:
-                #     cutoff_up = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * the_quarter)
-                #
-                # if the_quarter>1:
-                #     cutoff_low = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * (the_quarter-1))
-                # else:
-                #     cutoff_low = 0.9*np.percentile(pop_df_nan['Living space per Person 2017'],0)
-                #
-                #
-                # # Get the blocks belonging to this living space percentile
-                # blocks = pop_df['BlockID'].loc[(cutoff_low < pop_df['Living space per Person 2017']) & (pop_df['Living space per Person 2017']<=cutoff_up)].values
-
-                # Get population
-                pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
-
-            try:
-                # Subset the case data
-                print(list(blocks))
-                # df = df#[df['BlockID'].isin(list(blocks))]
-                print(str(the_quarter) + " has a total of " + str(df.shape[0]) + ' cases')
-            except:
-                raise ('Subset for quarter failed!!!')
-
-        # Produce time series
-        counts_del = df['DELTA'].value_counts().values
-        labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-        y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-        tsub = np.sort(labels_del)
-        tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-        for k in range(0, len(t)):
-            if t[k] not in tsub:
-                y_new_inf.insert(k, 0)
-
-        y_inf = np.cumsum(y_new_inf)
-
-        # Subset age group (not used at this stage yet)
-        sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-        sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-        sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-        sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-        # So far no data for fatalities
-        y_dead = []
-
-        # Use 7-day average
-        if use7DayAV:
-            y_inf_7av = np.zeros(y_inf.shape)
-            y_inf_new_7av = np.zeros(y_inf.shape)
-            for d in range(0, len(y_inf)):
-                ind = np.arange(d - 3, d + 4)
-                ind_use = ind[np.logical_and(ind >= 0, ind < len(y_inf))]
-                y_inf_new_7av[d] = np.mean(np.array(y_new_inf)[ind_use])
-            y_inf_7av = np.cumsum(y_inf_new_7av)
-
-            y_inf = y_inf_7av
-            y_new_inf = y_inf_new_7av
-
-        # Summarize
-        data = []
-        data.append(t)
-        data.append(y_dead)
-        data.append(y_inf)
-        data.append(y_new_inf)
-    else:
-
-        # read csv files for cases
-        # os.chdir('/project/data/20200722T103018/content/')#20200528T091303/content/epiData')
-        os.chdir('/Users/sbrueningk/Desktop/ILGE_Data/')
-        filename = os.path.join(wd, 'Data',
-                                'data.csv')  # 'EpiData_ETH_complete_20200720_extern.xlsx' #'EpiData_ETH_censor_20200515.xlsx'
-        # df = pd.read_excel(filename, 'positive')
-        df = pd.read_csv(filename)
-        # df_neg = pd.read_excel(filename, 'negative')
-        os.chdir(wd)
-
-        # fill in data for Riehen and Bettingen
-        # df.Quarters.fillna(df.Ortschaft, inplace = True)
-
-        # read soc'ioeconomic data
-        os.chdir(os.path.join(wd, 'geodata'))
-        # filename = 'SocioeconomicScore_data.xls'
-        filename = 'bs_quarter_mapping_all.csv'
-        pop_df = pd.read_csv(filename)
-        os.chdir(wd)
-
-        # restrict to dates greater than starting date
-        df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-        df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-        START = df['ENTNAHMEDATUM'] >= start
-        END = df['ENTNAHMEDATUM'] <= end
-        df = df[START & END]
-        tmp = (df['ENTNAHMEDATUM'] - start)
-        df['DELTA'] = tmp.astype('timedelta64[D]')
-        t = np.arange(df['DELTA'].max() + 1)  # np.array(np.unique(df['DELTA']))
-
-        # Subset for selected adm1_pcode
-        if the_quarter == 'all':
-            pop = pop_df['POPULATION'].sum()
-        else:
-
-            # Get the quarters beloning to this ID
-            quarters = pop_df['GEBIET'].loc[pop_df['ID_PARTNER'] == the_quarter].values
-            print('Using these quarters:', quarters)
-
-            # Get population
-            pop = pop_df['POPULATION'].loc[pop_df['ID_PARTNER'] == the_quarter].sum()
-
-            try:
-                # Subset the case data
-                df = df[df['Block ID'].isin(list(quarters))]
-                print(quarters + " has a total of " + str(df.shape[0]) + ' cases')
-            except:
-                raise ('Subset for quarter failed!!!')
-
-        # Produce time series
-        counts_del = df['DELTA'].value_counts().values
-        labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-        y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-        tsub = np.sort(labels_del)
-        tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-        for k in range(0, len(t)):
-            if t[k] not in tsub:
-                y_new_inf.insert(k, 0)
-
-        y_inf = np.cumsum(y_new_inf)
-
-        # Subset age group (not used at this stage yet)
-        sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-        sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-        sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-        sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-        # So far no data for fatalities
-        y_dead = []
-
-        # Summarize
-        data = []
-        data.append(t)
-        data.append(y_dead)
-        data.append(y_inf)
-        data.append(y_new_inf)
-
-    return data, pop
-
-
-def load_local_data_ILGE(the_quarter, start, end, usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc):
-    '''
-    Parameters
-    ----------
-    the_quarter  : the areas of interest, may be 'all'
-    start      : start date of analysis
-    end        : end date of analysis
-
-    Returns
-    --------
-    data matrix with time, n_fats, infected; and population for selected areas
+    This function needs to be adjusted to hande your specific data set
     '''
     global randomIndex
-
-    if mergeQuatSoc:
-
-        if usePangolin:
-
-            # read csv files for cases
-            os.chdir('Data')
-
-            # os.chdir('/project/data/20200817T141323/content/')
-            filename = 'EpiData_ETH_complete_20201104_final.xlsx'
-            df = pd.read_excel(filename, 'positive')
-            # df_neg = pd.read_excel(filename, 'negative')
-            os.chdir(wd)
-
-            # drop some cases
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42184023].index.values[0])
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42186104].index.values[0])
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42189099].index.values[0])
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42189999].index.values[0])
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42206243].index.values[0])
-            df = df.drop(df[df['AUFTRAGSNUMMER'] == 42206243].index.values[0])
-
-            # read csv files for cases
-            os.chdir('Data')
-            df_pos = pd.read_excel(filename, 'positive')
-            df_neg = pd.read_excel(filename, 'negative')
-            os.chdir(wd)
-            df_pos = df_pos.drop(df_pos[df_pos['AUFTRAGSNUMMER'] == 42184023].index.values[0])
-            df_pos = df_pos.drop(df_pos[df_pos['AUFTRAGSNUMMER'] == 42186104].index.values[0])
-            df_pos = df_pos.drop(df_pos[df_pos['AUFTRAGSNUMMER'] == 42189099].index.values[0])
-            df_pos = df_pos.drop(df_pos[df_pos['AUFTRAGSNUMMER'] == 42189999].index.values[0])
-            df_pos = df_pos.drop(df_pos[df_pos['AUFTRAGSNUMMER'] == 42206243].index.values[0])
-
-            df_pos.drop_duplicates(subset=['AUFTRAGSNUMMER'])
-            df_pos['ENTNAHMEDATUM'] = pd.to_datetime(df_pos['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df_pos['ENTNAHMEDATUM'] = df_pos['ENTNAHMEDATUM'].dt.date
-            START = df_pos['ENTNAHMEDATUM'] >= start
-            END = df_pos['ENTNAHMEDATUM'] <= end
-            df_pos = df_pos[START & END]
-            tmp = (df_pos['ENTNAHMEDATUM'] - start)
-            df_pos['DELTA'] = tmp.astype('timedelta64[D]')
-            time_pos = df_pos['DELTA'].value_counts().index
-            case_pos = df_pos['DELTA'].value_counts().values
-
-            df_neg.drop_duplicates(subset=['AUFTRAGSNUMMER'])
-            df_neg['ENTNAHMEDATUM'] = pd.to_datetime(df_neg['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df_neg['ENTNAHMEDATUM'] = df_neg['ENTNAHMEDATUM'].dt.date
-            START = df_neg['ENTNAHMEDATUM'] >= start
-            END = df_neg['ENTNAHMEDATUM'] <= end
-            df_neg = df_neg[START & END]
-            tmp = (df_neg['ENTNAHMEDATUM'] - start)
-            df_neg['DELTA'] = tmp.astype('timedelta64[D]')
-            time_neg = df_neg['DELTA'].value_counts().index
-            case_neg = df_neg['DELTA'].value_counts().values
-
-            # interpolate
-            t_posneg = np.arange(min(time_pos), max(time_pos) + 1)
-            interpPos = interp1d(time_pos, case_pos)
-            interpNeg = interp1d(time_neg, case_neg)
-            case_posInt = interpPos(t_posneg)
-            case_negInt = interpNeg(t_posneg)
-
-            # get 7 day moving average
-            if use7DayAV:
-                case_pos_7av = np.zeros(case_posInt.shape)
-                for d in range(0, len(case_posInt)):
-                    ind = np.arange(d - 3, d + 4)
-                    ind_use = ind[np.logical_and(ind >= 0, ind < len(case_posInt))]
-                    case_pos_7av[d] = np.mean(np.array(case_posInt)[ind_use])
-                posCases = case_pos_7av
-            else:
-                posCases = case_posInt
-            t_poscases = t_posneg
-
-            # Get ratio
-            ratio = case_posInt / (case_negInt + case_posInt)
-            ratio_7av = np.zeros(ratio.shape)
-            for d in range(0, len(ratio)):
-                ind = np.arange(d - 3, d + 4)
-                ind_use = ind[np.logical_and(ind >= 0, ind < len(ratio))]
-                ratio_7av[d] = np.mean(ratio[ind_use])
-            ratio_use = ratio_7av  # /np.mean(ratio_7av)
-            ratioPosNeg_time_dep = UnivariateSpline(t_posneg, ratio_use, s=0.0001)
-
-            fig1 = plt.figure(figsize=(6, 6))
-            ax = fig1.add_subplot()
-            plt.plot(t_posneg, case_posInt / (case_negInt + case_posInt), '-', linewidth=2, label='Ratio p/(p+n)')
-            plt.plot(t_posneg, ratio_7av, '-', linewidth=2, label='7d av Ratio')
-            plt.plot(t_posneg, ratioPosNeg_time_dep(t_posneg), '-', linewidth=2,
-                     label='Smoothened Interpolation used')
-            plt.xlabel('Day since 26.2.2020')
-            plt.ylabel('Interaction Fraction')
-            plt.legend()
-
-            fig1 = plt.figure(figsize=(6, 6))
-            ax = fig1.add_subplot()
-            plt.plot(time_neg, case_neg, '-', linewidth=2, label='Negative')
-            plt.plot(time_pos, case_pos, '-', linewidth=2, label='Positive')
-            # plt.plot(t_posneg, case_posInt/case_negInt, '-', linewidth=2, label='Ratio')
-            plt.xlabel('Day since 26.2.2020')
-            plt.ylabel('Interaction Fraction')
-            plt.legend()
-
-            ratioPosNeg_time_dep_norm = UnivariateSpline(t_posneg, 0.999 / 0.85 * ratio_use / max(ratio_use), s=0.0001)
-            ratioPosNeg_time_dep_norm2 = UnivariateSpline(t_posneg, (0.999 / 0.85 - max(ratio_use)) + ratio_use,
-                                                          s=0.0001)
-
-            # fig1 = plt.figure(figsize=(6, 6))
-            # ax = fig1.add_subplot()
-            # plt.plot(t_posneg, ratio_use, '-', linewidth=2, label='7d av Ratio')
-            # plt.plot(t_posneg, stretchFunPosNeg(t_posneg,tmin,0, ratioPosNeg_time_dep_norm), '-', linewidth=2, label='7d av Ratio')
-            # plt.plot(t_posneg, stretchFunPosNeg(t_posneg, tmin, 0.3, ratioPosNeg_time_dep_norm), '-', linewidth=2,
-            #          label='7d av Ratio')
-            # plt.plot(t_posneg, stretchFunPosNeg2(t_posneg, tmin, 0., ratioPosNeg_time_dep_norm), '-', linewidth=2,
-            #          label='7d av Ratio')
-            # plt.xlabel('Day since 26.2.2020')
-            # plt.ylabel('Interaction Fraction')
-            # plt.legend()
-
-            # Get Basel strain fraction over time
-            df_notBS = df[df['orf1b_C15324T'] == 'no']
-            df_notBS = df_notBS.drop_duplicates(subset=['AUFTRAGSNUMMER'])
-            df_notBS['ENTNAHMEDATUM'] = pd.to_datetime(df_notBS['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df_notBS['ENTNAHMEDATUM'] = df_notBS['ENTNAHMEDATUM'].dt.date
-            START = df_notBS['ENTNAHMEDATUM'] >= start
-            END = df_notBS['ENTNAHMEDATUM'] <= end
-            df_notBS = df_notBS[START & END]
-            tmp = (df_notBS['ENTNAHMEDATUM'] - start)
-            df_notBS['DELTA'] = tmp.astype('timedelta64[D]')
-            time_notBS = np.array(np.unique(df_notBS['DELTA']))
-            case_notBS = df_notBS['DELTA'].value_counts().values
-
-            df_BS = df[df['orf1b_C15324T'] == 'yes']
-            df_BS = df_BS.drop_duplicates(subset=['AUFTRAGSNUMMER'])
-            df_BS['ENTNAHMEDATUM'] = pd.to_datetime(df_BS['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df_BS['ENTNAHMEDATUM'] = df_BS['ENTNAHMEDATUM'].dt.date
-            START = df_BS['ENTNAHMEDATUM'] >= start
-            END = df_BS['ENTNAHMEDATUM'] <= end
-            df_BS = df_BS[START & END]
-            tmp = (df_BS['ENTNAHMEDATUM'] - start)
-            df_BS['DELTA'] = tmp.astype('timedelta64[D]')
-
-            time_BS = np.array(np.unique(df_BS['DELTA']))
-            case_BS = df_BS['DELTA'].value_counts().values
-
-            t_BSnotBS = np.arange(min([min(time_BS), min(time_notBS)]), max([max(time_BS), max(time_notBS)]) + 1)
-            interpBS = interp1d(time_BS, case_BS)
-            interpnotBS = interp1d(time_notBS, case_notBS)
-            case_BSInt = np.zeros(t_BSnotBS.shape)
-            for t in range(0, len(t_BSnotBS)):
-                if t_BSnotBS[t] >= min(time_BS) and t_BSnotBS[t] <= max(time_BS):
-                    case_BSInt[t] = interpBS(t_BSnotBS[t])
-
-            case_notBSInt = np.ones(t_BSnotBS.shape)
-            for t in range(0, len(t_BSnotBS)):
-                if t_BSnotBS[t] >= min(time_notBS) and t_BSnotBS[t] <= max(time_notBS):
-                    case_notBSInt[t] = interpnotBS(t_BSnotBS[t])
-
-            ratioBS = case_BSInt / (case_notBSInt + case_BSInt)
-            ratioBS_7av = np.zeros(ratioBS.shape)
-            for d in range(0, len(ratioBS)):
-                ind = np.arange(d - 3, d + 4)
-                ind_use = ind[np.logical_and(ind >= 0, ind < len(ratioBS))]
-                ratioBS_7av[d] = np.mean(ratioBS[ind_use])
-            ratioBS_use = ratioBS_7av / np.max(ratioBS_7av)
-            baselstrain = np.mean(ratioBS_7av[15:])
-            sequenced = (df_notBS.shape[0] + df_BS.shape[0]) / df_pos.shape[0]
-            global ratioBS_time_dep
-            ratioBS_time_dep = UnivariateSpline(t_BSnotBS, ratioBS_use, s=0.0001)
-
-            fig1 = plt.figure(figsize=(6, 6))
-            ax = fig1.add_subplot()
-            plt.plot(t_BSnotBS, ratioBS_7av, '-', linewidth=2, label='7day av Basel strain percentage')
-            plt.xlabel('Day since 26.2.2020')
-            plt.ylabel('Interaction Fraction')
-            plt.legend()
-
-            fig1 = plt.figure(figsize=(6, 6))
-            ax = fig1.add_subplot()
-            plt.plot(t_BSnotBS, ratioPosNeg_time_dep(t_BSnotBS), '-', linewidth=2, label='norm 7d av Ratio BS*RatioPos')
-            plt.xlabel('Day since 26.2.2020')
-            plt.ylabel('Interaction Fraction')
-            plt.legend()
-
-            g = ratioBS_use * ratioPosNeg_time_dep(t_BSnotBS)
-            p = ratioPosNeg_time_dep(t_posneg)
-            u = findFct(11.94, p)
-            global ratio_time_dep
-            # ratio_time_dep = UnivariateSpline(t_BSnotBS, u)
-
-            # Subset for the pangolin strain
-            df = df[df['orf1b_C15324T'] == pangolingStrain]
-            df = df.drop_duplicates(subset=['AUFTRAGSNUMMER'])
-
-            # fill in data for Riehen and Bettingen
-            df.Quarters.fillna(df.ORTSCHAFT, inplace=True)
-
-            # restrict to dates greater than starting date
-            df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-            START = df['ENTNAHMEDATUM'] >= start
-            END = df['ENTNAHMEDATUM'] <= end
-            df = df[START & END]
-            tmp = (df['ENTNAHMEDATUM'] - start)
-            df['DELTA'] = tmp.astype('timedelta64[D]')
-            t = np.arange(df['DELTA'].max() + 5)  # np.array(np.unique(df['DELTA']))
-
-            # Get all population data
-            os.chdir(os.path.join(wd, 'geodata'))
-            filename = 'SocioeconomicScore_data.csv'
-            pop_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            # Get socioeconomic data
-            if useNaturalBreaks:
-                name_suffix = 'natural_breaks'
-            else:
-                name_suffix = 'percentiles'
-            os.chdir(os.path.join(wd, 'graphs'))
-            if useForTiles == 'MedianIncome2017':
-                filename = 'bs_MedianIncome2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'CoHab_index':
-                filename = 'bs_CohabProxIndex_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'SENIOR_ANT':
-                filename = 'bs_SENIOR_ANT_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'LivingSpace':
-                filename = 'bs_Living_space_per_Person_2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == '1PHouseholds':
-                filename = 'bs_1PHouseholds_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'random':
-                filename = 'bs_random_' + str(n_splitsSoc) + 'tiles_' + randomIndex + '.csv'
-            else:
-                filename = 'bs_' + useForTiles + '_' + str(n_splitsSoc) + name_suffix + '.csv'
-                # raise ('Invalid choice of separation for tiles')
-            soc_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            if the_quarter == 'all':
-                raise ('The option all is not supported for splitting according to living space')
-            else:
-
-                # Get total number of inhabitants
-                os.chdir(os.path.join(wd, 'geodata'))
-                filename = 'bs_quarter_mapping_all.csv'
-                pop_tot_df = pd.read_csv(filename)
-                os.chdir(wd)
-
-                # For each tile get the blocks and population
-                blocks = soc_df['BLO_ID'].loc[soc_df['percentile'] == the_quarter].values
-
-                # Split according to living space
-                pop_df_nan = pop_df.dropna(axis=0)
-                if the_quarter == 0:
-
-                    # # Use NaNs
-                    # blocks = pop_df['BlockID'].loc[pop_df['Living space per Person 2017'].isnull()].values
-                    # pop = pop_tot_df['POPULATION'].sum() - pop_df_nan['Population 2017'].sum()
-
-                    otherBlocks = soc_df['BLO_ID'].loc[soc_df['percentile'] != the_quarter].values
-                    pop = pop_tot_df['POPULATION'].sum() - pop_df['Population 2017'].loc[
-                        pop_df['BlockID'].isin(otherBlocks)].sum()
-                else:
-                    # if the_quarter == n_splitsSoc:
-                    #     cutoff_up = max(pop_df['Living space per Person 2017'])
-                    # else:
-                    #     cutoff_up = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * the_quarter)
-                    #
-                    # if the_quarter>1:
-                    #     cutoff_low = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * (the_quarter-1))
-                    # else:
-                    #     cutoff_low = 0.9*np.percentile(pop_df_nan['Living space per Person 2017'],0)
-                    #
-                    #
-                    # # Get the blocks belonging to this living space percentile
-                    # blocks = pop_df['BlockID'].loc[(cutoff_low < pop_df['Living space per Person 2017']) & (pop_df['Living space per Person 2017']<=cutoff_up)].values
-
-                    # Get population
-                    pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
-
-                try:
-                    # Subset the case data
-                    df = df[df['Block ID'].isin(list(blocks))]
-                    print(str(the_quarter) + " has a total of " + str(df.shape[0]) + ' cases')
-                except:
-                    raise ('Subset for quarter failed!!!')
-
-            counts_del = df['DELTA'].value_counts().values
-            labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-            y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-            tsub = np.sort(labels_del)
-            tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-            for k in range(0, len(t)):
-                if t[k] not in tsub:
-                    y_new_inf.insert(k, 0)
-
-            y_inf = np.cumsum(y_new_inf)
-
-            # Subset age group (not used at this stage yet)
-            sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-            sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-            sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-            sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-            # So far no data for fatalities
-            y_dead = []
-
-            # Use 7-day average
-            # if use7DayAV:
-            #     y_inf_new_7av = np.zeros(y_inf.shape)
-            #     for d in range(0, len(y_inf)):
-            #         ind = np.arange(d - 3, d + 4)
-            #         ind_use = ind[np.logical_and(ind >= 0, ind < len(y_inf))]
-            #         y_inf_new_7av[d] = np.mean(np.array(y_new_inf)[ind_use])
-            #     y_inf_7av = np.cumsum(y_inf_new_7av)
-            #
-            #     y_inf = y_inf_7av
-            #     y_new_inf = y_inf_new_7av
-
-            # Summarize
-            data = []
-            data.append(t)
-            data.append(y_dead)
-            data.append(y_inf)
-            data.append(y_new_inf)
-
-        else:
-
-            # read csv files for cases
-            os.chdir('/project/data/20200722T103018/content/')  # 20200528T091303/content/epiData')
-            filename = 'EpiData_ETH_complete_20200720_extern.xlsx'  # 'EpiData_ETH_censor_20200515.xlsx'
-            df = pd.read_excel(filename, 'positive')
-            # df_neg = pd.read_excel(filename, 'negative')
-            os.chdir(wd)
-
-            # fill in data for Riehen and Bettingen
-            df.Quarters.fillna(df.Ortschaft, inplace=True)
-
-            # restrict to dates greater than starting date
-            df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-            START = df['ENTNAHMEDATUM'] >= start
-            END = df['ENTNAHMEDATUM'] <= end
-            df = df[START & END]
-            tmp = (df['ENTNAHMEDATUM'] - start)
-            df['DELTA'] = tmp.astype('timedelta64[D]')
-            t = np.arange(df['DELTA'].max() + 1)  # np.array(np.unique(df['DELTA']))
-
-            # Get socioeconomic data
-            os.chdir(os.path.join(wd, 'geodata'))
-            filename = 'SocioeconomicScore_data.csv'
-            pop_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            # Get socioeconomic data
-            if useNaturalBreaks:
-                name_suffix = 'natural_breaks'
-            else:
-                name_suffix = 'percentiles'
-            os.chdir(os.path.join(wd, 'graphs'))
-            if useForTiles == 'MedianIncome2017':
-                filename = 'bs_MedianIncome2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'CoHab_index':
-                filename = 'bs_CohabProxIndex_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'SENIOR_ANT':
-                filename = 'bs_SENIOR_ANT_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'LivingSpace':
-                filename = 'bs_Living_space_per_Person_2017_' + str(n_splitsSoc) + name_suffix + '.csv'
-            elif useForTiles == 'random':
-                filename = 'bs_random_' + str(n_splitsSoc) + 'tiles_' + randomIndex + '.csv'
-            else:
-                filename = 'bs_' + useForTiles + '_' + str(n_splitsSoc) + name_suffix + '.csv'
-
-            soc_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            # if the_quarter == 'all':
-            #     raise ('The option all is not supported for splitting according to living space')
-            # else:
-            #
-            #     # Get total number of inhabitants
-            #     os.chdir(os.path.join(wd, 'geodata'))
-            #     filename = 'bs_quarter_mapping_all.csv'
-            #     pop_tot_df = pd.read_csv(filename)
-            #     os.chdir(wd)
-            #
-            #     # Split according to living space
-            #     pop_df_nan = pop_df.dropna(axis=0)
-            #     if the_quarter == 0:
-            #         # Use NaNs
-            #         blocks = pop_df['BlockID'].loc[pop_df['Living space per Person 2017'].isnull()].values
-            #         pop = pop_tot_df['POPULATION'].sum() - pop_df_nan['Population 2017'].sum()
-            #     else:
-            #         if the_quarter == n_splitsSoc:
-            #             cutoff_up = max(pop_df['Living space per Person 2017'])
-            #         else:
-            #             cutoff_up = np.percentile(pop_df_nan['Living space per Person 2017'],
-            #                                       100 / n_splitsSoc * the_quarter)
-            #
-            #         if the_quarter > 1:
-            #             cutoff_low = np.percentile(pop_df_nan['Living space per Person 2017'],
-            #                                        100 / n_splitsSoc * (the_quarter - 1))
-            #         else:
-            #             cutoff_low = 0.9 * np.percentile(pop_df_nan['Living space per Person 2017'], 0)
-            #
-            #         # Get the blocks belonging to this living space percentile
-            #         blocks = pop_df['BlockID'].loc[(cutoff_low < pop_df['Living space per Person 2017']) & (
-            #                     pop_df['Living space per Person 2017'] <= cutoff_up)].values
-            #
-            #         # Get population
-            #         pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
-            #
-            #     try:
-            #         # Subset the case data
-            #         df = df[df['BlockID'].isin(list(blocks))]
-            #         print(the_quarter + " has a total of " + str(df.shape[0]) + ' cases')
-            #     except:
-            #         raise('Subset for quarter failed!!!')
-
-            # Produce time series
-            if the_quarter == 'all':
-                raise ('The option all is not supported for splitting according to living space')
-            else:
-
-                # Get total number of inhabitants
-                os.chdir(os.path.join(wd, 'geodata'))
-                filename = 'bs_quarter_mapping_all.csv'
-                pop_tot_df = pd.read_csv(filename)
-                os.chdir(wd)
-
-                # For each tile get the blocks and population
-                blocks = soc_df['BLO_ID'].loc[soc_df['percentile'] == the_quarter].values
-
-                # Split according to living space
-                pop_df_nan = pop_df.dropna(axis=0)
-                if the_quarter == 0:
-
-                    # # Use NaNs
-                    # blocks = pop_df['BlockID'].loc[pop_df['Living space per Person 2017'].isnull()].values
-                    # pop = pop_tot_df['POPULATION'].sum() - pop_df_nan['Population 2017'].sum()
-
-                    otherBlocks = soc_df['BLO_ID'].loc[soc_df['percentile'] != the_quarter].values
-                    pop = pop_tot_df['POPULATION'].sum() - pop_df['Population 2017'].loc[
-                        pop_df['BlockID'].isin(otherBlocks)].sum()
-                else:
-                    # if the_quarter == n_splitsSoc:
-                    #     cutoff_up = max(pop_df['Living space per Person 2017'])
-                    # else:
-                    #     cutoff_up = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * the_quarter)
-                    #
-                    # if the_quarter>1:
-                    #     cutoff_low = np.percentile(pop_df_nan['Living space per Person 2017'], 100 / n_splitsSoc * (the_quarter-1))
-                    # else:
-                    #     cutoff_low = 0.9*np.percentile(pop_df_nan['Living space per Person 2017'],0)
-                    #
-                    #
-                    # # Get the blocks belonging to this living space percentile
-                    # blocks = pop_df['BlockID'].loc[(cutoff_low < pop_df['Living space per Person 2017']) & (pop_df['Living space per Person 2017']<=cutoff_up)].values
-
-                    # Get population
-                    pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
-
-                try:
-                    # Subset the case data
-                    df = df[df['BlockID'].isin(list(blocks))]
-                    print(the_quarter + " has a total of " + str(df.shape[0]) + ' cases')
-                except:
-                    raise ('Subset for quarter failed!!!')
-
-            counts_del = df['DELTA'].value_counts().values
-            labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-            y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-            tsub = np.sort(labels_del)
-            tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-            for k in range(0, len(t)):
-                if t[k] not in tsub:
-                    y_new_inf.insert(k, 0)
-
-            y_inf = np.cumsum(y_new_inf)
-
-            # Subset age group (not used at this stage yet)
-            sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-            sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-            sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-            sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-            # So far no data for fatalities
-            y_dead = []
-
-            # Summarize
-            data = []
-            data.append(t)
-            data.append(y_dead)
-            data.append(y_inf)
-            data.append(y_new_inf)
-
+    global ratio_time_dep
+
+
+
+    # read csv files for cases
+    os.chdir('Data')
+    df = pd.read_excel(filenameCaseData, 'positive')
+    os.chdir(wd)
+
+
+    # read csv files for cases
+    os.chdir('Data')
+    df_pos = pd.read_excel(filename, 'positive')
+    df_neg = pd.read_excel(filename, 'negative')
+    os.chdir(wd)
+
+    # restrict to dates greater than starting date
+    df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
+    df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
+    START = df['ENTNAHMEDATUM'] >= start
+    END = df['ENTNAHMEDATUM'] <= end
+    df = df[START & END]
+    tmp = (df['ENTNAHMEDATUM'] - start)
+    df['DELTA'] = tmp.astype('timedelta64[D]')
+    t = np.arange(df['DELTA'].max())
+
+    # Get all population data
+    os.chdir(os.path.join(wd, 'geodata'))
+    filename = 'SocioeconomicScore_data.csv'
+    pop_df = pd.read_csv(filename)
+    os.chdir(wd)
+
+    # Get socioeconomic data
+    name_suffix = 'percentiles'
+    os.chdir(os.path.join(wd, 'graphs'))
+    filename = 'bs_' + useForTiles + '_' + str(n_splitsSoc) + name_suffix + '.csv'
+    soc_df = pd.read_csv(filename)
+    os.chdir(wd)
+
+
+    # Get total number of inhabitants
+    os.chdir(os.path.join(wd, 'geodata'))
+    filename = 'bs_quarter_mapping_all.csv'
+    pop_tot_df = pd.read_csv(filename)
+    os.chdir(wd)
+
+    # For each tile get the blocks and population
+    blocks = soc_df['BLO_ID'].loc[soc_df['percentile'] == the_quarter].values
+
+    # Split according to living space
+    if the_quarter == 0:
+        otherBlocks = soc_df['BLO_ID'].loc[soc_df['percentile'] != the_quarter].values
+        pop = pop_tot_df['POPULATION'].sum() - pop_df['Population 2017'].loc[
+            pop_df['BlockID'].isin(otherBlocks)].sum()
     else:
-        if usePangolin:
-            # read csv files for cases
-            os.chdir('/project/data/20200817T141323/content/')  # 20200528T091303/content/epiData')
-            filename = 'EpiData_ETH_complete_20200816_jElHFB.xlsx'  # 'EpiData_ETH_censor_20200515.xlsx'
-            df = pd.read_excel(filename, 'positive')
-            # df_neg = pd.read_excel(filename, 'negative')
-            os.chdir(wd)
+        # Get population
+        pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
 
-            # Subset for the pangolin strain
-            df = df[df['Pangolin'] == pangolingStrain]
 
-            # fill in data for Riehen and Bettingen
-            df.Quarters.fillna(df.Ortschaft, inplace=True)
+    # Subset the case data
+    df = df[df['Block ID'].isin(list(blocks))]
+    print(str(the_quarter) + " has a total of " + str(df.shape[0]) + ' cases')
 
-            # read soc'ioeconomic data
-            os.chdir(os.path.join(wd, 'geodata'))
-            # filename = 'SocioeconomicScore_data.xls'
-            filename = 'bs_quarter_mapping_all.csv'
-            pop_df = pd.read_csv(filename)
-            os.chdir(wd)
+    # Generate epicurve
+    counts_del = df['DELTA'].value_counts().values
+    labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
+    y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
+    tsub = np.sort(labels_del)
+    tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
+    for k in range(0, len(t)):
+        if t[k] not in tsub:
+            y_new_inf.insert(k, 0)
 
-            # restrict to dates greater than starting date
-            df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-            START = df['ENTNAHMEDATUM'] >= start
-            END = df['ENTNAHMEDATUM'] <= end
-            df = df[START & END]
-            tmp = (df['ENTNAHMEDATUM'] - start)
-            df['DELTA'] = tmp.astype('timedelta64[D]')
-            t = np.arange(df['DELTA'].max() + 1)  # np.array(np.unique(df['DELTA']))
+    y_inf = np.cumsum(y_new_inf)
 
-            # Subset for selected adm1_pcode
-            if the_quarter == 'all':
-                pop = pop_df['POPULATION'].sum()
-            else:
 
-                # Get the quarters beloning to this ID
-                quarters = pop_df['GEBIET'].loc[pop_df['ID_PARTNER'] == the_quarter].values
-                print('Using these quarters:', quarters)
+    # So far no data for fatalities
+    y_dead = []
 
-                # Get population
-                pop = pop_df['POPULATION'].loc[pop_df['ID_PARTNER'] == the_quarter].sum()
+    # Summarize
+    data = []
+    data.append(t)
+    data.append(y_dead)
+    data.append(y_inf)
+    data.append(y_new_inf)
 
-                try:
-                    # Subset the case data
-                    df = df[df['Quarters'].isin(list(quarters))]
-                    print(quarters + " has a total of " + str(df.shape[0]) + ' cases')
-                except:
-                    raise ('Subset for quarter failed!!!')
 
-            # Produce time series
-            counts_del = df['DELTA'].value_counts().values
-            labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-            y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-            tsub = np.sort(labels_del)
-            tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-            for k in range(0, len(t)):
-                if t[k] not in tsub:
-                    y_new_inf.insert(k, 0)
-
-            y_inf = np.cumsum(y_new_inf)
-
-            # Subset age group (not used at this stage yet)
-            sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-            sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-            sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-            sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-            # So far no data for fatalities
-            y_dead = []
-
-            # Summarize
-            data = []
-            data.append(t)
-            data.append(y_dead)
-            data.append(y_inf)
-            data.append(y_new_inf)
-
-        else:
-            # read csv files for cases
-            os.chdir('/project/data/20200722T103018/content/')  # 20200528T091303/content/epiData')
-            filename = 'EpiData_ETH_complete_20200720_extern.xlsx'  # 'EpiData_ETH_censor_20200515.xlsx'
-            df = pd.read_excel(filename, 'positive')
-            # df_neg = pd.read_excel(filename, 'negative')
-            os.chdir(wd)
-
-            # fill in data for Riehen and Bettingen
-            df.Quarters.fillna(df.Ortschaft, inplace=True)
-
-            # read soc'ioeconomic data
-            os.chdir(os.path.join(wd, 'geodata'))
-            # filename = 'SocioeconomicScore_data.xls'
-            filename = 'bs_quarter_mapping_all.csv'
-            pop_df = pd.read_csv(filename)
-            os.chdir(wd)
-
-            # restrict to dates greater than starting date
-            df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-            df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-            START = df['ENTNAHMEDATUM'] >= start
-            END = df['ENTNAHMEDATUM'] <= end
-            df = df[START & END]
-            tmp = (df['ENTNAHMEDATUM'] - start)
-            df['DELTA'] = tmp.astype('timedelta64[D]')
-            t = np.arange(df['DELTA'].max() + 1)  # np.array(np.unique(df['DELTA']))
-
-            # Subset for selected adm1_pcode
-            if the_quarter == 'all':
-                pop = pop_df['POPULATION'].sum()
-            else:
-
-                # Get the quarters beloning to this ID
-                quarters = pop_df['GEBIET'].loc[pop_df['ID_PARTNER'] == the_quarter].values
-                print('Using these quarters:', quarters)
-
-                # Get population
-                pop = pop_df['POPULATION'].loc[pop_df['ID_PARTNER'] == the_quarter].sum()
-
-                try:
-                    # Subset the case data
-                    df = df[df['Quarters'].isin(list(quarters))]
-                    print(quarters + " has a total of " + str(df.shape[0]) + ' cases')
-                except:
-                    print('Using all data since subset for quarter failed!!!')
-
-            # Produce time series
-            counts_del = df['DELTA'].value_counts().values
-            labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-            y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-            tsub = np.sort(labels_del)
-            tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-            for k in range(0, len(t)):
-                if t[k] not in tsub:
-                    y_new_inf.insert(k, 0)
-
-            y_inf = np.cumsum(y_new_inf)
-
-            # Subset age group (not used at this stage yet)
-            sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-            sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-            sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-            sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-            # So far no data for fatalities
-            y_dead = []
-
-            # Summarize
-            data = []
-            data.append(t)
-            data.append(y_dead)
-            data.append(y_inf)
-            data.append(y_new_inf)
-
-    return data, pop, baselstrain, sequenced, posCases, t_poscases
+    return data, pop, baselstrain
 
 
 def obtain_adjacencyILGE(quarter, neigh, n_splitsSoc):
     global useForTiles
 
-    if neigh == 'physical':
-        file = os.path.join(wd, 'graphs', 'bs_physical_neighborhood.csv')
+    transport_means = ['publ', 'bike', 'moto', 'foot']
+    name_suffix     = 'percentiles'
+
+    for i, tr in enumerate(transport_means):
+
+        if useForTiles == 'MedianIncome2017':
+            file = os.path.join(wd, 'graphs', 'bs_MedianIncome2017_' + str(
+                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
+        elif useForTiles == 'SENIOR_ANT':
+            file = os.path.join(wd, 'graphs', 'bs_SENIOR_ANT_' + str(
+                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
+        elif useForTiles == 'LivingSpace':
+            file = os.path.join(wd, 'graphs', 'bs_Living_space_per_Person_2017_' + str(
+                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
+        elif useForTiles == 'random':
+            file = os.path.join(wd, 'graphs', 'bs_random_' + str(
+                n_splitsSoc) + 'tiles_' + randomIndex + '_' + tr + '_mobility.csv')
+        else:
+            file = os.path.join(wd, 'graphs', 'bs_' + useForTiles + '_' + str(
+                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
+
         A_all = pd.read_csv(file)
 
         if quarter[0] == 'all':
-            A = A_all
+            A_tr = A_all
         else:
-            A = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-            A = A.set_index('Unnamed: 0')
-            A = A.loc[quarter, :]
-    elif neigh == 'estimate':
-        A = np.ones((len(quarter), len(quarter)))
+            A_tr = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
+            A_tr = A_tr.set_index('Unnamed: 0')
+            A_tr = A_tr.loc[quarter, :]
 
-    elif neigh == 'transport':
-        file = os.path.join(wd, 'graphs', 'bs_sbb_quarter.csv')
-        A_all = pd.read_csv(file)
-
-        if quarter[0] == 'all':
-            A = A_all
+        # Sum up
+        if i == 0:
+            A = A_tr
         else:
-            A = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-            A = A.set_index('Unnamed: 0')
-            A = A.loc[quarter, :]
-
-        # Normalize
-        row_sums = A.sum(axis=1)
-        A = A / A.sum().sum()
-
-        # Remove diagonal elements
-        A = np.fill_diagonal(A, 0)
-
-    elif neigh == 'merged':
-
-        transport_means = ['publ', 'bike', 'moto', 'foot']
-        if useNaturalBreaks:
-            name_suffix = 'natural_breaks'
-        else:
-            name_suffix = 'percentiles'
-
-        for i, tr in enumerate(transport_means):
-
-            if useForTiles == 'MedianIncome2017':
-                file = os.path.join(wd, 'graphs', 'bs_MedianIncome2017_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'CoHab_index':
-                file = os.path.join(wd, 'graphs', 'bs_CohabProxIndex_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'SENIOR_ANT':
-                file = os.path.join(wd, 'graphs', 'bs_SENIOR_ANT_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'LivingSpace':
-                file = os.path.join(wd, 'graphs', 'bs_Living_space_per_Person_2017_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'random':
-                file = os.path.join(wd, 'graphs', 'bs_random_' + str(
-                    n_splitsSoc) + 'tiles_' + randomIndex + '_' + tr + '_mobility.csv')
-            else:
-                file = os.path.join(wd, 'graphs', 'bs_' + useForTiles + '_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-
-            A_all = pd.read_csv(file)
-
-            if quarter[0] == 'all':
-                A_tr = A_all
-            else:
-                A_tr = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-                A_tr = A_tr.set_index('Unnamed: 0')
-                A_tr = A_tr.loc[quarter, :]
-
-            # Sum up
-            if i == 0:
-                A = A_tr
-            else:
-                A = A + A_tr
-                # row_sums = A.sum(axis=1)
-                # A = A / row_sums[:, np.newaxis]
-
-        # Remove diagonal elements
-        if diagonalMobilityZero:
-            np.fill_diagonal(A_tr.values, 0)
-
-        # Normalize
-        A = A_tr / A_tr.sum().sum()
-
-
-
-    else:
-        raise ('Invalid neighbor!')
-
-    return A
-
-
-def obtain_adjacencyILGE_NormRow(quarter, neigh, n_splitsSoc, pop):
-    global useForTiles
-
-    if neigh == 'physical':
-        file = os.path.join(wd, 'graphs', 'bs_physical_neighborhood.csv')
-        A_all = pd.read_csv(file)
-
-        if quarter[0] == 'all':
-            A = A_all
-        else:
-            A = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-            A = A.set_index('Unnamed: 0')
-            A = A.loc[quarter, :]
-    elif neigh == 'estimate':
-        A = np.ones((len(quarter), len(quarter)))
-
-    elif neigh == 'transport':
-        file = os.path.join(wd, 'graphs', 'bs_sbb_quarter.csv')
-        A_all = pd.read_csv(file)
-
-        if quarter[0] == 'all':
-            A = A_all
-        else:
-            A = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-            A = A.set_index('Unnamed: 0')
-            A = A.loc[quarter, :]
-
-        # Normalize
-        row_sums = A.sum(axis=1)
-        A = A / A.sum().sum()
-
-        # Remove diagonal elements
-        A = np.fill_diagonal(A, 0)
-
-    elif neigh == 'merged':
-
-        transport_means = ['publ', 'bike', 'moto', 'foot']
-        if useNaturalBreaks:
-            name_suffix = 'natural_breaks'
-        else:
-            name_suffix = 'percentiles'
-
-        for i, tr in enumerate(transport_means):
-
-            if useForTiles == 'MedianIncome2017':
-                file = os.path.join(wd, 'graphs', 'bs_MedianIncome2017_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'CoHab_index':
-                file = os.path.join(wd, 'graphs', 'bs_CohabProxIndex_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'SENIOR_ANT':
-                file = os.path.join(wd, 'graphs', 'bs_SENIOR_ANT_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'LivingSpace':
-                file = os.path.join(wd, 'graphs', 'bs_Living_space_per_Person_2017_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-            elif useForTiles == 'random':
-                file = os.path.join(wd, 'graphs', 'bs_random_' + str(
-                    n_splitsSoc) + 'tiles_' + randomIndex + '_' + tr + '_mobility.csv')
-            else:
-                file = os.path.join(wd, 'graphs', 'bs_' + useForTiles + '_' + str(
-                    n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-
-            A_all = pd.read_csv(file)
-
-            if quarter[0] == 'all':
-                A_tr = A_all
-            else:
-                A_tr = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-                A_tr = A_tr.set_index('Unnamed: 0')
-                A_tr = A_tr.loc[quarter, :]
-
-            # Sum up
-            if i == 0:
-                A = A_tr
-            else:
-                A = A + A_tr
-
-        # Remove diagonal elements
-        if diagonalMobilityZero:
-            np.fill_diagonal(A_tr.values, 0)
-
-        # Normalize to 1 in total
-        Anorm = np.array(A_tr / A_tr.sum().sum())
-
-        # Normalize each row
-        pop_frac = sum(pop) / pop
-        n_adm = len(pop)
-        A = np.zeros((Anorm.shape))
-        for k in range(0, n_adm):
-            for j in range(0, n_adm):
-                A[k, j] = (Anorm[k, j] + Anorm[j, k]) * pop[j] / (pop[j] + pop[k])
-
-
-    else:
-        raise ('Invalid neighbor!')
-
-    return A
-
-
-def obtain_SocAdjacencyILGE(quarter):
-    file = os.path.join(wd, 'graphs', 'bs_socioeco_median-distance.csv')
-    A_all = pd.read_csv(file)
-
-    if quarter[0] == 'all':
-        A = A_all
-    else:
-        A = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-        A = A.set_index('Unnamed: 0')
-        A = A.loc[quarter, :]
+            A = A + A_tr
 
     # Normalize
-    row_sums = A.sum(axis=1)
-    A = A / A.sum().sum()
+    A = A_tr / A_tr.sum().sum()
 
     return A
 
-
-def getProximityIndex():
-    n_tiles = 3
-
-    # get data
-    file = 'ProximityIndex_200929.xls'
-    path = os.path.join(wd, 'geodata', file)
-    df = pd.read_excel(path)
-
-    # Counts per quantile
-    cp_index = df['CohabProxInd'].values
-    # plt.hist(cp_index, 20)
-    # plt.xlabel('CP index')
-    # plt.ylabel('Number of Blocks')
-
-    # Divide
-    cp_3tiles = np.zeros(cp_index.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= 4:
-            cp_3tiles[i] = 1
-        elif 4 < cp_index[i] <= 6:
-            cp_3tiles[i] = 2
-        elif 6 < cp_index[i]:
-            cp_3tiles[i] = 3
-    plt.hist(cp_3tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('3 Tiles')
-
-    cp_4tiles = np.zeros(cp_index.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= 4:
-            cp_4tiles[i] = 1
-        elif 4 < cp_index[i] <= 5:
-            cp_4tiles[i] = 2
-        elif 5 < cp_index[i] <= 6:
-            cp_4tiles[i] = 3
-        elif 6 < cp_index[i]:
-            cp_4tiles[i] = 4
-    plt.hist(cp_4tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('4 Tiles')
-
-    cp_5tiles = np.zeros(cp_index.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= 3:
-            cp_5tiles[i] = 1
-        elif 3 < cp_index[i] <= 4:
-            cp_5tiles[i] = 2
-        elif 4 < cp_index[i] <= 5:
-            cp_5tiles[i] = 3
-        elif 5 < cp_index[i] <= 6:
-            cp_5tiles[i] = 4
-        elif 6 < cp_index[i]:
-            cp_5tiles[i] = 5
-    plt.hist(cp_5tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('5 Tiles')
-
-    # save
-    df = df.rename(columns={"BlockID": "BLO_ID"})
-    df3tiles = df.copy()
-    df3tiles['percentile'] = cp_3tiles
-    df3tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_3Tiles.csv'))
-    df4tiles = df.copy()
-    df4tiles['percentile'] = cp_4tiles
-    df4tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_4Tiles.csv'))
-    df5tiles = df.copy()
-    df5tiles['percentile'] = cp_5tiles
-    df5tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_5Tiles.csv'))
-
-    np.nanquantile(cp_index, 0.33)
-
-
-def getProximityIndex_Jenks():
-    n_tiles = 3
-
-    # get data
-    file = 'ProximityIndex_200929.xls'
-    path = os.path.join(wd, 'geodata', file)
-    df = pd.read_excel(path)
-
-    # get data
-    lSp = df['LivSpacePerPers17'].values
-    PpHH = df['Anteil 2- und Mehr-PH'].values
-
-    # Exclude outlier
-    ind = np.where(lSp > 311)[0][0]
-    lSp[ind] = np.nan
-
-    # 1. Exclude Nans
-    nonaninds = np.logical_and(~np.isnan(lSp), ~np.isnan(PpHH))
-    lSp_noNan = lSp[nonaninds]
-    PpHH_noNan = PpHH[nonaninds]
-
-    # Normalized living space data
-    n_lSp_noNan = (lSp_noNan - lSp_noNan.min()) / (np.nanmax(lSp_noNan - np.nanmin(lSp_noNan)))
-    n_lSp = (lSp - lSp_noNan.min()) / (np.nanmax(lSp - np.nanmin(lSp_noNan)))
-
-    # 2+PpHH - already normalized
-    n_2PpHH_noNan = PpHH_noNan
-
-    # Check correlation of Living space and 2+PpHH:
-    rho, p = stats.spearmanr(n_lSp_noNan, n_2PpHH_noNan)
-
-    # Plot
-    fig = plt.figure(figsize=(6, 6))
-    plt.scatter(n_lSp_noNan, n_2PpHH_noNan)
-    plt.xlabel('normalized Living space pP')
-    plt.ylabel('percentage of 2+ person house holds')
-
-    # Sum living space and +2personHH
-    sum_lsp_2pHH = PpHH + n_lSp
-
-    # Back to dataframe
-    df['Sum_Lsp_2pHH'] = sum_lsp_2pHH
-
-    # Calcualte natural breaks according to tile numbers
-    breaks = jenkspy.jenks_breaks(df['Sum_Lsp_2pHH'], nb_class=n_tiles)
-    breaks4 = jenkspy.jenks_breaks(df['Sum_Lsp_2pHH'], nb_class=4)
-    breaks5 = jenkspy.jenks_breaks(df['Sum_Lsp_2pHH'], nb_class=5)
-
-    # Divide
-    cp_index = df['Sum_Lsp_2pHH'].values
-    cp_3tiles = np.zeros(lSp.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= breaks[1]:
-            cp_3tiles[i] = 1
-        elif breaks[1] < cp_index[i] <= breaks[2]:
-            cp_3tiles[i] = 2
-        elif breaks[2] < cp_index[i]:
-            cp_3tiles[i] = 3
-
-    fig1 = plt.figure(figsize=(6, 6))
-    plt.hist(cp_3tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('3 Tiles')
-
-    cp_4tiles = np.zeros(cp_index.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= breaks4[1]:
-            cp_4tiles[i] = 1
-        elif breaks4[1] < cp_index[i] <= breaks4[2]:
-            cp_4tiles[i] = 2
-        elif breaks4[2] < cp_index[i] <= breaks4[3]:
-            cp_4tiles[i] = 3
-        elif breaks4[3] < cp_index[i]:
-            cp_4tiles[i] = 4
-    fig1 = plt.figure(figsize=(6, 6))
-    plt.hist(cp_4tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('4 Tiles')
-
-    cp_5tiles = np.zeros(cp_index.shape)
-    for i in range(0, len(df['BlockID'])):
-
-        if cp_index[i] <= breaks5[1]:
-            cp_5tiles[i] = 1
-        elif breaks5[1] < cp_index[i] <= breaks5[2]:
-            cp_5tiles[i] = 2
-        elif breaks5[2] < cp_index[i] <= breaks5[3]:
-            cp_5tiles[i] = 3
-        elif breaks5[3] < cp_index[i] <= breaks5[4]:
-            cp_5tiles[i] = 4
-        elif breaks5[4] < cp_index[i]:
-            cp_5tiles[i] = 5
-    fig1 = plt.figure(figsize=(6, 6))
-    plt.hist(cp_5tiles, 10)
-    plt.xlabel('CP Tile')
-    plt.ylabel('Number of Blocks')
-    plt.title('5 Tiles')
-
-    # save
-    df = df.rename(columns={"BlockID": "BLO_ID"})
-    df3tiles = df.copy()
-    df3tiles['percentile'] = cp_3tiles
-    df3tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_3Tiles.csv'))
-    df4tiles = df.copy()
-    df4tiles['percentile'] = cp_4tiles
-    df4tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_4Tiles.csv'))
-    df5tiles = df.copy()
-    df5tiles['percentile'] = cp_5tiles
-    df5tiles.to_csv(os.path.join(wd, 'graphs', 'cohabitationProxIndex_5Tiles.csv'))
-
-    np.nanquantile(cp_index, 0.33)
 
 
 # Parameters and bounds
-def par_list_general(model, n_adm, n_exp_0, n_inf_0, n_rec_0, n_fat_0, n_asi_0, \
-                     n_asr_0, n_und_0, R_infU_in_0, T_infI_0, T_inc_0, p_fat_0, R_red_0, R_redU_0, p_sym_0, \
-                     R_asy_in_0, b_deR_0, a_deR_0, T_infA_0, T_infU_0, alpha_0, alpha_f, a_alpha, b_alpha, adj_el,
-                     local, neigh, alpha_fix, alphaS_0, R_i_asy, T_i_asy, p_asy, n_un_i_0, n_un_r_0, seedSingle,
-                     ind_seedQuarter):
-    if model == 'SEAIRD':
-        par_list = initial_vars(n_adm, n_exp_0, n_inf_0, n_rec_0, n_fat_0, n_asi_0, \
-                                n_asr_0, n_und_0)
-        par_list += [R_infU_in_0, T_infI_0, T_inc_0, p_fat_0, R_red_0, R_redU_0, p_sym_0, \
-                     R_asy_in_0, b_deR_0, a_deR_0, T_infA_0, T_infU_0]
-    elif model == 'SEUI':
-
-        if alpha_fix:
-
-            # Mobility rate alpha is fixed but free, R is time-dependent
-            print('R varies over time, alpha constant over time')
-            par_list = initial_vars_SEUI(n_adm, n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0, seedSingle,
-                                         ind_seedQuarter)
-            if local:
-                print('All parameters individually optimized for each quarter!')
-
-                if useRelativeR:
-                    par_list += [R_infU_in_0] + list([0.99, 0.46]) + [T_inc_0] + list(np.repeat(R_redU_0, n_adm)) + \
-                                list(np.repeat(b_deR_0, n_adm)) + list(np.repeat(a_deR_0, n_adm)) \
-                                + [T_infU_0, alpha_0, alphaS_0] \
-                                + list(np.repeat(R_i_asy, n_adm)) + [T_i_asy, p_asy]
-
-                else:
-                    par_list += list(np.repeat(R_infU_in_0, n_adm)) + [T_inc_0] + list(np.repeat(R_redU_0, n_adm)) + \
-                                list(np.repeat(b_deR_0, n_adm)) + list(np.repeat(a_deR_0, n_adm)) \
-                                + [T_infU_0, alpha_0, alphaS_0] \
-                                + list(np.repeat(R_i_asy, n_adm)) + [T_i_asy, p_asy]
-            else:
-                par_list += list(np.repeat(R_infU_in_0, n_adm)) + [T_inc_0] + list(np.repeat(R_redU_0, n_adm)) + \
-                            list(np.repeat(b_deR_0, n_adm)) + list(np.repeat(a_deR_0, n_adm)) \
-                            + [T_infU_0, alpha_0, alphaS_0] \
-                            + list(np.repeat(R_i_asy, n_adm)) + [T_i_asy, p_asy]
-        else:
-
-            # Mobility rate alpha is time dependent, but R not
-            print('Alpha varies over time, R constant over time')
-            par_list = initial_vars_SEUI(n_adm, n_exp_0, n_und_0, n_inf_0)
-            if local:
-                print('All parameters individually optimized for each quarter!')
-                # separate set of parameters for all
-                par_list += list(
-                    np.repeat([R_infU_in_0, T_inc_0, alpha_f, b_alpha, a_alpha, T_infU_0, alpha_0, alphaS_0], n_adm))
-            else:
-                print('All parameters the same but optimized for all quarters!')
-                if neigh == 'estimate':
-                    print('Fitting adjacency matrix elements!')
-                    par_list += [R_infU_in_0, T_inc_0, alpha_f, b_alpha, a_alpha, T_infU_0, alpha_0] + \
-                                list(adj_el * np.ones((n_adm * n_adm, 1)))
-                else:
-                    print('NOT fitting adjacency matrix elements!')
-                    par_list += list(np.repeat(R_infU_in_0, n_adm)) + [T_inc_0] + list(np.repeat(alpha_f, n_adm)) + \
-                                list(np.repeat(b_alpha, n_adm)) + list(np.repeat(a_alpha, n_adm)) \
-                                + [T_infU_0, alpha_0, alphaS_0]
+def par_list_general(n_adm, n_exp_0, n_inf_0, n_und_0, R_infU_in_0, T_inc_0, T_infU_0, T_i_asy, p_asy,
+                     n_un_i_0, n_un_r_0, seedSingle,ind_seedQuarter):
 
 
-    else:
-        raise ('Invalid ODE model')
+    # Mobility rate alpha is fixed but free, R is time-dependent
+    par_list = initial_vars_SEUI(n_adm, n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0, seedSingle,ind_seedQuarter)
+
+    par_list += list(np.repeat(R_infU_in_0, n_adm)) + [T_inc_0,T_infU_0,T_i_asy, p_asy]
+
 
     return par_list
 
 
-def bnds_vars_general(n_adm, model, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, \
-                      bnd_n_und, bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_fat, bnd_R_red, bnd_R_redU, \
-                      bnd_p_sym, bnd_R_asy_in, bnd_b_deR, bnd_a_deR, bnd_T_infA, bnd_T_infU, bnd_alpha,
-                      bnd_alpha_f, bnd_a_alpha, bnd_b_alpha, bnd_adj_el, local, neigh, alpha_fix, bnd_alphaS,
-                      bnd_n_uni, bnd_n_unr, bnd_R_i_asy, bnd_T_i_asy, bnd_p_asy, seedSingle, seedQuarter):
-    bnds_lst = [bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, \
-                bnd_n_und]
+def bnds_vars_general(n_adm, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, \
+                      bnd_n_und, bnd_R_infU_in, bnd_T_inc, bnd_T_infU,
+                      bnd_n_uni, bnd_n_unr, bnd_T_i_asy, bnd_p_asy, seedSingle, seedQuarter):
 
-    if model == 'SEAIRD':
-        bnds = bnds_vars(n_adm, bnds_lst)
-        bnds += bnd_R_infU_in + bnd_T_infI + bnd_T_inc + bnd_p_fat + bnd_R_red + bnd_R_redU + \
-                bnd_p_sym + bnd_R_asy_in + bnd_b_deR + bnd_a_deR + bnd_T_infA + bnd_T_infU
+    bnds_lst = [bnd_n_exp, bnd_n_inf, bnd_n_und]
+    bnds  = bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarter)
 
-
-    elif model == 'SEUI':
-        bnds = bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarter)
-
-        if alpha_fix:
-
-            # Mobility rate alpha is fixed but free, R is time-dependent
-            if local:
-
-                if useRelativeR:
-
-                    bnds += bnd_R_infU_in + ((0., 1.7),) * (
-                                n_adm - 1) + bnd_T_inc + bnd_R_redU * n_adm + bnd_b_deR * n_adm + \
-                            bnd_a_deR * n_adm + bnd_T_infU + bnd_alpha + bnd_alphaS + \
-                            bnd_R_i_asy * n_adm + bnd_T_i_asy + bnd_p_asy
-
-                else:
-                    bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_R_redU * n_adm + bnd_b_deR * n_adm + \
-                            bnd_a_deR * n_adm + bnd_T_infU + bnd_alpha + bnd_alphaS + \
-                            bnd_R_i_asy * n_adm + bnd_T_i_asy + bnd_p_asy
-            else:
-                bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_R_redU * n_adm + bnd_b_deR * n_adm + \
-                        bnd_a_deR * n_adm + bnd_T_infU + bnd_alpha + bnd_alphaS + \
-                        bnd_R_i_asy * n_adm + bnd_T_i_asy + bnd_p_asy
-        else:
-
-            # Mobility rate alpha is time dependent, but R not
-            if local:
-                # All parameters individually optimized for each quarter
-                # separate set of parameters for all
-                bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_alpha_f * n_adm + bnd_b_alpha * n_adm + \
-                        bnd_a_alpha * n_adm + bnd_T_infU + bnd_alpha * n_adm
-            else:
-                # All parameters the same but optimized for all quarters
-                if neigh == 'estimate':
-                    # Fitting adjacency matrix elements
-                    bnds += bnd_R_infU_in + bnd_T_inc + bnd_alpha_f + bnd_b_alpha + bnd_a_alpha + bnd_T_infU + \
-                            bnd_alpha + bnd_adj_el * n_adm * n_adm
-                else:
-                    # NOT fitting adjacency matrix elements
-                    bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_alpha_f * n_adm + bnd_b_alpha * n_adm + \
-                            bnd_a_alpha * n_adm + bnd_T_infU + bnd_alpha
-
-
-    else:
-        raise ('Invalid ODE model')
+    bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_T_infU + bnd_T_i_asy + bnd_p_asy
 
     return bnds
 
@@ -2457,30 +999,17 @@ def initial_vars_SEUI(n_adm, n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0, seed
         n_inf_0 = 0
         n_un_i_0 = 0
         n_un_r_0 = 0
-        n_r_0 = 0
 
-        if useReortingDelay:
-            inits = [n_exp_0, n_und_0, n_r_0, n_un_i_0, n_un_r_0, n_inf_0]
-            inits_all_adm = np.repeat(inits, n_adm)
-            inits_all_adm = inits_all_adm.tolist()
-            inits_all_adm[ind_seedQuarter] = 1.
-        else:
-            inits = [n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0]
-            inits_all_adm = np.repeat(inits, n_adm)
-            inits_all_adm = inits_all_adm.tolist()
-            inits_all_adm[ind_seedQuarter] = 5.
+        inits = [n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0]
+        inits_all_adm = np.repeat(inits, n_adm)
+        inits_all_adm = inits_all_adm.tolist()
+        inits_all_adm[ind_seedQuarter] = 5.
 
     else:
-        if useReortingDelay:
-            inits = [n_exp_0, n_und_0, n_r_0, n_un_i_0, n_un_r_0, n_inf_0]
-            inits_all_adm = np.repeat(inits, n_adm)
-            inits_all_adm = inits_all_adm.tolist()
-        else:
-            inits = [n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0]
-            inits_all_adm = np.repeat(inits, n_adm)
-            inits_all_adm = inits_all_adm.tolist()
+        inits = [n_exp_0, n_und_0, n_inf_0, n_un_i_0, n_un_r_0]
+        inits_all_adm = np.repeat(inits, n_adm)
+        inits_all_adm = inits_all_adm.tolist()
     return inits_all_adm
-
 
 def bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarter):
     '''Defines the bounds for each compartment variable. Repeats the same
@@ -2495,8 +1024,7 @@ def bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarte
     -------
     list containing the bounds for the state variables.
     '''
-    [bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, bnd_n_in2] \
-        = bnds_lst
+    [bnd_n_exp, bnd_n_inf,bnd_n_in2] = bnds_lst
 
     if seedSingle:
         bnd_n_uni = ((0, 0),)
@@ -2504,13 +1032,9 @@ def bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarte
         bnd_n_exp = ((0, 0),)
         bnd_n_inf = ((0, 0),)
         bnd_n_in2 = ((0, 0),)
-        bnd_n_r = ((0, 0),)
-        if useReortingDelay:
-            bnds = bnd_n_exp * n_adm + bnd_n_r * n_adm + bnd_n_inf * n_adm + bnd_n_uni * n_adm + bnd_n_unr * n_adm + bnd_n_in2 * n_adm
-        else:
-            bnds = bnd_n_exp * n_adm + bnd_n_in2 * n_adm + bnd_n_inf * n_adm + bnd_n_uni * n_adm + bnd_n_unr * n_adm
+        bnds = bnd_n_exp * n_adm + bnd_n_in2 * n_adm + bnd_n_inf * n_adm + bnd_n_uni * n_adm + bnd_n_unr * n_adm
         lst_bnds = list(bnds)
-        lst_bnds[seedQuarter] = (0.1, 5)
+        lst_bnds[seedQuarter] = (0.1, 10)
         bnds = tuple(lst_bnds)
     else:
         bnds = bnd_n_exp * n_adm + bnd_n_in2 * n_adm + bnd_n_inf * n_adm + bnd_n_uni * n_adm + bnd_n_unr * n_adm
@@ -2519,24 +1043,14 @@ def bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarte
 
 
 # Fit
-def fit_general(model, par_list, data_trn, bnds, fixed_pars, adm0, t_trn, t_tst, alpha_fix, neigh):
-    if model == 'SEAIRD':
-        result = dofit2(par_list, data_trn, bnds, fixed_pars, adm0)
+def fit_general(par_list, data_trn, bnds, fixed_pars, adm0, t_trn, t_tst):
 
-        # optain curve resulting from optimization
-        t = np.concatenate((t_trn, t_tst))
-        fit = solution2(t, result.x, fixed_pars).T
+    result = dofit_SEUI(par_list, data_trn, bnds, fixed_pars, adm0)
 
-    elif model == 'SEUI':
+    # optain curve resulting from optimization
+    t = np.concatenate((t_trn, t_tst))
+    fit = solution_SEUI(t, result.x, fixed_pars).T
 
-        result = dofit_SEUI(par_list, data_trn, bnds, fixed_pars, adm0)
-
-        # optain curve resulting from optimization
-        t = np.concatenate((t_trn, t_tst))
-        fit = solution_SEUI(t, result.x, fixed_pars).T
-
-    else:
-        raise ('Invalid ODE model')
 
     return result, t, fit
 
@@ -2694,6 +1208,13 @@ def ode_model_SEUI(Y, t, pars, fixed_pars):
     return np.concatenate((dsdt, dedt, dudt, didt, du_idt, du_rdt))
 
 
+def socFun(t):
+    y = time_dep_soc(t)
+    if type(t) == float:
+        if y < 0:
+            y = 0
+    return y
+
 def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
     """ODE model. The order of compartments in Y is s, e, i, r, d, a, ar, i2,
     repeated for the number of considered nodes. If 3 adm1 areas are cosidered,
@@ -2726,105 +1247,31 @@ def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
     t_max = fixed_pars[16]
 
     # Optionally fit adjacency matrix
-    if neigh == 'estimate':
-        Adj = np.reshape(pars[-n_adm * n_adm:], (n_adm, n_adm))
-        AdjSoc = np.reshape(pars[-n_adm * n_adm:], (n_adm, n_adm))
-    else:
-        Adj = fixed_pars[3]
-        AdjSoc = fixed_pars[9]
+    Adj = fixed_pars[3]
+
 
     # Other fit parameters
-    if alp_fix:
-        if not local:
-            R_infU_in = pars[:n_adm]
-            T_inc = pars[n_adm]
-            R_redU_frac = pars[n_adm + 1:(n_adm + 1) + n_adm]
-            b_deR = pars[2 * n_adm + 1:3 * n_adm + 1][0]
-            a_deR = pars[3 * n_adm + 1:4 * n_adm + 1][0]
-            T_infU = pars[4 * n_adm + 1]
-            alpha = pars[4 * n_adm + 2]
-            alphaS_us = pars[4 * n_adm + 3]
-            R_inf_Ui_in = pars[4 * n_adm + 4:5 * n_adm + 4]
-            T_inf_Ui = pars[5 * n_adm + 4]
-            p_unr_in = pars[5 * n_adm + 5]
+    R_infU_in = pars[:n_adm]
+    T_inc = pars[n_adm]
+    T_infU = pars[4 * n_adm + 1]
+    alpha  = 1
+    T_inf_Ui = pars[5 * n_adm + 4]
+    p_unr    = pars[5 * n_adm + 5]
 
 
-        elif local:
-            R_infU_in = pars[:n_adm]
-            T_inc = pars[n_adm]
-            R_redU_frac = pars[n_adm + 1:(n_adm + 1) + n_adm]
-            b_deR = pars[2 * n_adm + 1:3 * n_adm + 1][0]
-            a_deR = pars[3 * n_adm + 1:4 * n_adm + 1][0]
-            T_infU = pars[4 * n_adm + 1]
-            alpha = pars[4 * n_adm + 2]
-            alphaS_us = pars[4 * n_adm + 3]
-            R_inf_Ui_in = pars[4 * n_adm + 4:5 * n_adm + 4:]
-            T_inf_Ui = pars[5 * n_adm + 4]
-            p_unr_in = pars[5 * n_adm + 5]
-
-        try:
-            if t < t_max:
-                t_dep = time_dep(t)
-                t_dep_soc = time_dep_soc(t)
-            else:
-                t_dep = time_dep(t_max)
-                t_dep_soc = time_dep_soc(t_max)
-
-            if useExponentTimeseries:
-                alpha_use = alpha * (t_dep ** b_deR)
-            else:
-                alpha_use = alpha * t_dep
-        except:
-            print("Interpolation failed for this time: ")
-            print(t)
-
-        if useVariable_p_unr:
-            p_unr = p_unr_in * sigmoid_p(0.9999 / p_unr_in, R_inf_Ui_in[0], a_deR, b_deR, t)  # ratio_time_dep(t)
-        else:
-            p_unr = p_unr_in
-
-        # time dependence for measures taken on R
-        if useSigmoid:
-            raise ('CODE NOT CHECKED!!!')
-            if useMultiplicModel:
-                alpha_soc = sigmoid_R(1., R_redU_frac[0], a_deR, b_deR, t)
-                R_infU = R_infU_in * alpha_soc
-            else:
-                R_redU = R_redU_frac * R_infU_in
-                # R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp(t - a_deR) / b_deR) + R_redU
-                R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp((t - a_deR) / b_deR)) + R_redU
-
-        else:
-
-            if useMultiplicModel:
-
-                if useStretchSocial:
-                    stretch = 0.19 * alphaS_us
-                else:
-                    stretch = 0
-
-                if useHomeReproductive:
-                    R_infU_mob = stretchFun(t, 51, stretch) * R_redU_frac[0]
-                    R_inf_Ui_mob = stretchFun(t, 51, stretch) * R_redU_frac[0]
-                    R_inf_U_base = R_infU_in.copy()
-                    R_inf_Ui_base = R_infU_in.copy()
-                    R_infU = 0
-                else:
-                    R_infU = stretchFun(t, 51, stretch) * R_infU_in
+    # Mobility
+    if t < t_max:
+        t_dep = time_dep(t)
+        t_dep_soc = time_dep_soc(t)
+    else:
+        t_dep = time_dep(t_max)
+        t_dep_soc = time_dep_soc(t_max)
 
 
-
-            else:
-                R_infU = timeDep_R(R_infU_in, R_redU_frac, t_dep)
-
-        if useRelativeR:
-            if useHomeReproductive:
-                for i_tile in range(1, n_adm):
-                    R_inf_U_base[i_tile] = R_inf_U_base[0] * R_infU_in[i_tile]
-                    R_inf_Ui_base[i_tile] = R_inf_Ui_base[0] * R_infU_in[i_tile]
-            else:
-                for i_tile in range(1, n_adm):
-                    R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
+    alpha_use = alpha * t_dep
+    R_infU = socFun(t) * R_infU_in
+    for i_tile in range(1, n_adm):
+        R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
 
     if constantMobility:
         alpha_use = alpha
@@ -2833,19 +1280,9 @@ def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
             alpha_use = 0
 
     if constantR:
-        if useHomeReproductive:
-            R_infU_mob
-            R_inf_Ui_mob
-            R_inf_U_base
-            R_inf_Ui_base
-
-        else:
-            if useRelativeR:
-                R_infU[0] = R_infU_in[0].copy()
-                for i_tile in range(1, n_adm):
-                    R_infU[i_tile] = R_infU_in[0] * R_infU_in[i_tile]
-            else:
-                R_infU = R_infU_in.copy()
+        R_infU[0] = R_infU_in[0].copy()
+        for i_tile in range(1, n_adm):
+            R_infU[i_tile] = R_infU_in[0] * R_infU_in[i_tile]
 
         R_infU = R_infU * fixedSocial
 
@@ -2857,108 +1294,41 @@ def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
     e = Y[1 * n_adm:2 * n_adm]
     u = Y[2 * n_adm:3 * n_adm]
     i = Y[3 * n_adm:4 * n_adm]
-    n = s + e + i + u
-
-    if useUnrepor:
-        u_i = Y[4 * n_adm:5 * n_adm]
-        u_r = Y[5 * n_adm:6 * n_adm]
-        n = n + u_i + u_r
-
-        if useReortingDelay:
-            i = Y[6 * n_adm:7 * n_adm]
-            r = Y[3 * n_adm:4 * n_adm]
-            n = n + i
-            T_delay = pars[n_adm]
-            T_inc = 4
-
-        # Susceptibles: Add - diffusion term to E - diffusion term to A
-        if useMultiplicModel:
-            if useHomeReproductive:
-
-                dsdt = - np.multiply(alpha_use * s * R_infU_mob / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                       - np.multiply(alpha_use * s * R_inf_Ui_mob / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i))) \
-                       - s * R_inf_Ui_base * u_i / (n * T_inf_Ui) \
-                       - s * R_inf_U_base * u / (n * T_infU)
-
-                # Exposed - not infectious
-                dedt = - np.multiply(1 / T_inc, e) \
-                       + np.multiply(alpha_use * s * R_infU_mob / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                       + np.multiply(alpha_use * s * R_inf_Ui_mob / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i))) \
-                       + s * R_inf_Ui_base * u_i / (n * T_inf_Ui) \
-                       + s * R_inf_U_base * u / (n * T_infU)
-            else:
-                dsdt = - np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                       - np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
-
-                # Exposed - not infectious
-                dedt = - np.multiply(1 / T_inc, e) \
-                       + np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                       + np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
+    u_i = Y[4 * n_adm:5 * n_adm]
+    u_r = Y[5 * n_adm:6 * n_adm]
+    n   = s + e + i + u + u_i + u_r
 
 
-        else:
+    # Susceptibles: Add - diffusion term to E - diffusion term to A
+    dsdt = - np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
+           - np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
 
-            dsdt = - np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-                   - c * (np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u)))) \
-                   - np.multiply(np.multiply(R_inf_Ui / T_inf_Ui, u_i), s / n) \
-                   - c * (np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))) \
- \
-                # Exposed - not infectious
-            dedt = np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-                   - np.multiply(1 / T_inc, e) \
-                   + np.multiply(np.multiply(R_inf_Ui / T_inf_Ui, u_i), s / n) \
-                   + c * (np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u)))) \
-                   + c * (np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))) \
- \
-                # Infectious prior to symptom onset
-        dudt = np.multiply(1 / T_inc, e) - np.multiply(1 / T_infU, u)
+    # Exposed - not infectious
+    dedt = - np.multiply(1 / T_inc, e) \
+           + np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
+           + np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
 
-        # Reported infected - assumed to be isolated
-        if useReortingDelay:
-            didt = (1 - p_unr) * np.multiply(1 / T_infU, u) - np.multiply(1 / T_delay, i)
-            drdt = np.multiply(1 / T_delay, i)
-        else:
-            didt = (1 - p_unr) * np.multiply(1 / T_infU, u)
+    # Presymptomatic
+    dudt = np.multiply(1 / T_inc, e) - np.multiply(1 / T_infU, u)
 
-        if useNoUi:
+    # Reported infected - assumed to be isolated
+    didt = (1 - p_unr) * np.multiply(1 / T_infU, u)
 
-            # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
-            du_idt = np.zeros(u.shape)
+    if useNoUi:
 
-            # Unreported recovered - account for duration of infectious periode
-            du_rdt = p_unr * np.multiply(1 / T_infU, u)
-        else:
-            # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
-            du_idt = p_unr * np.multiply(1 / T_infU, u) - np.multiply(1 / T_inf_Ui, u_i) \
- \
-                # Unreported recovered - account for duration of infectious periode
-            du_rdt = np.multiply(1 / T_inf_Ui, u_i)
+        # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
+        du_idt = np.zeros(u.shape)
 
+        # Unreported recovered - account for duration of infectious periode
+        du_rdt = p_unr * np.multiply(1 / T_infU, u)
     else:
+        # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
+        du_idt = p_unr * np.multiply(1 / T_infU, u) - np.multiply(1 / T_inf_Ui, u_i) \
+\
+            # Unreported recovered - account for duration of infectious periode
+        du_rdt = np.multiply(1 / T_inf_Ui, u_i)
 
-        du_idt = 0
-        du_rdt = 0
 
-        # Susceptibles: Add - diffusion term to E - diffusion term to A
-        dsdt = - np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-               - c * (np.multiply(alpha_use * s / (n + np.sum(Adj, axis=0)), \
-                                  np.dot(Adj, np.multiply(R_infU / T_infU, np.multiply(s, u) / n)))) \
-               - c * (np.multiply(alphaS_us * s / (n + np.sum(AdjSoc, axis=0)), \
-                                  np.dot(AdjSoc, np.multiply(R_infU / T_infU, np.multiply(s, u) / n))))
-
-        # Exposed - not infectious
-        dedt = np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-               - np.multiply(1 / T_inc, e)
-
-        # Infectious prior to symptom onset
-        dudt = np.multiply(1 / T_inc, e) - np.multiply(1 / T_infU, u) \
-               + c * (np.multiply(alpha_use * s / (n + np.sum(Adj, axis=0)), \
-                                  np.dot(Adj, np.multiply(R_infU / T_infU, np.multiply(s, u) / n)))) \
-               + c * (np.multiply(alphaS_us * s / (n + np.sum(AdjSoc, axis=0)), \
-                                  np.dot(AdjSoc, np.multiply(R_infU / T_infU, np.multiply(s, u) / n))))
-
-        # Reported infected
-        didt = np.multiply(1 / T_infU, u)
 
     # output has to have shape
     if useReortingDelay:
@@ -3190,13 +1560,8 @@ def dofit_SEUI(par_list, data_train, bnds, fixed_pars, adm0):
                  args=(data_train), \
                  method='L-BFGS-B', \
                  bounds=bnds, \
-                 # tol=1e-5, \
-                 options={'gtol': 1e-8, 'ftol': 1e-8, 'disp': True, 'maxiter': 200})  # 200
+                 options={'gtol': 1e-8, 'ftol': 1e-8, 'disp': True, 'maxiter': 200})
 
-    print(' ')
-    print('n_exp_0 = ' + str(result.x[0]))
-    print('n_inf_0 = ' + str(result.x[2]))
-    print('n_und_0 = ' + str(result.x[1]))
     return result
 
 
@@ -3229,7 +1594,6 @@ def residual_SEUI_parallel(pars, data, fixed_pars, adm0):
         yfit_cuminf = yfit_inf
 
         n_cuminf = data[i][1:n_adm + 1, :]
-        # res_inf = np.mean((yfit_cuminf - n_cuminf) ** 2)
 
         inds = np.logical_and(~np.isinf(np.log(n_cuminf)),
                               ~np.isinf(np.log(yfit_cuminf)))
@@ -3256,10 +1620,8 @@ def residual_SEUI(pars, data, fixed_pars, adm0):
     sum of the infected's and deceased's residuals
     '''
     n_adm = fixed_pars[0]
-    n_cmp = fixed_pars[1]
     t = data[0]
     n_cuminf = data[1:n_adm + 1, :]
-    # n_fat    = data[n_adm+1:]
 
     # Solution with given parameter set
     yfit = solution_SEUI(t, pars, fixed_pars)
@@ -3268,25 +1630,12 @@ def residual_SEUI(pars, data, fixed_pars, adm0):
     yfit_inf = yfit[3 * n_adm:4 * n_adm]
     yfit_cuminf = yfit_inf
 
-    # res_inf = np.mean((yfit_cuminf - n_cuminf) ** 2)
 
-    if multiplyCaseNUmbers:
-        n_cuminf = n_cuminf * 12.5
-
-    if useGradient:
-        res_inf = 0
-        for i in range(0, n_adm):
-            inds = np.logical_and(~np.isinf(np.log(np.gradient(n_cuminf[i, :]))),
-                                  ~np.isinf(np.log(np.gradient(yfit_cuminf[i, :]))))
-            yfit_cuminf_use = yfit_cuminf[i, inds]
-            n_cuminf_use = n_cuminf[i, inds]
-            res_inf = res_inf + np.sum((np.log(np.gradient(yfit_cuminf_use)) - np.log(np.gradient(n_cuminf_use))) ** 2)
-    else:
-        inds = np.logical_and(~np.isinf(np.log(n_cuminf)),
-                              ~np.isinf(np.log(yfit_cuminf)))
-        weights = np.ones(yfit_cuminf[inds].shape)
-        weights[n_cuminf[inds] < 15] = 0.0
-        res_inf = np.sum(weights * (np.log(yfit_cuminf[inds]) - np.log(n_cuminf[inds])) ** 2)
+    inds = np.logical_and(~np.isinf(np.log(n_cuminf)),
+                          ~np.isinf(np.log(yfit_cuminf)))
+    weights = np.ones(yfit_cuminf[inds].shape)
+    weights[n_cuminf[inds] < 15] = 0.0
+    res_inf = np.sum(weights * (np.log(yfit_cuminf[inds]) - np.log(n_cuminf[inds])) ** 2)
 
     return res_inf
 
@@ -3310,67 +1659,25 @@ def solution_SEUI(t, par_list, fixed_pars):
     y0 = np.concatenate((s_0, par_list[:((n_cmp - 1) * n_adm)]))
     pars = par_list[(n_cmp - 1) * n_adm:]
 
-    if useSymMat:
-        sol = odeint(lambda a, b, c: ode_model_SEUI_SymMat(a, b, c, fixed_pars), y0, t, args=(pars,))
-    else:
-        sol = odeint(lambda a, b, c: ode_model_SEUI(a, b, c, fixed_pars), y0, t, args=(pars,))
+    sol = odeint(lambda a, b, c: ode_model_SEUI_SymMat(a, b, c, fixed_pars), y0, t, args=(pars,))
+
 
     return sol
 
 
-# Uncertainty
-def loadUncertData(n_uncert, quat, uncData_id, t_trn):
-    data_in = [np.zeros((len(quat) + 1, len(t_trn))) for i in range(n_uncert + 1)]
-    counter = 0
-    for j, q in enumerate(quat):
-        df_data = pd.read_csv(os.path.join(wd, 'Data', str(q) + '_data_' + uncData_id + '.csv'))
-        df_data = df_data.drop('Unnamed: 0', axis=1)
-        # df_time = pd.read_csv(os.path.join(wd,'Data',str(q)+'_time_'+uncData_id+'.csv'))
-        for i in range(0, len(data_in)):
-            if counter == 0:
-                data_in[i][0, :] = t_trn
-            data_in[i][j + 1, :] = df_data.loc[i, :].values[t_trn.astype(int)]
-        counter = counter + 1
-
-    return data_in
-
-
-def uncertFit_loaded(input):
-    data_in = input[0]
-    t_trn = input[1]
-    model = input[2]
-    par_list = input[3]
-    bnds = input[4]
-    fixed_pars = input[5]
-    adm0 = input[6]
-    t_tst = input[7]
-    neigh = input[8]
-    alpha_fix = input[9]
-    index = input[10]
-
-    # fit model
-    result_i, t_i, fit_i = fit_general(model, par_list, data_in[index], bnds, fixed_pars, adm0, t_trn,
-                                       t_tst, neigh, alpha_fix)
-    out = [result_i, data_in[index], fit_i]
-    return out
-
-
 def uncertFit(input):
-    data_trn = input[0]
-    t_trn = input[1]
-    model = input[2]
-    par_list = input[3]
-    bnds = input[4]
-    fixed_pars = input[5]
-    adm0 = input[6]
-    t_tst = input[7]
-    neigh = input[8]
-    alpha_fix = input[9]
-    inds_s10 = input[10]
-    rmse = input[11]
-    mean_points = input[12]
-    rand_seed = input[13]
-    n_adm = fixed_pars[0]
+    data_trn    = input[0]
+    t_trn       = input[1]
+    par_list    = input[2]
+    bnds        = input[3]
+    fixed_pars  = input[4]
+    adm0        = input[5]
+    t_tst       = input[6]
+    inds_s10    = input[7]
+    rmse        = input[8]
+    mean_points = input[9]
+    rand_seed   = input[10]
+    n_adm       = fixed_pars[0]
 
     # Only accept runs with a minimum goodness of fit
     acceptableFit = 0
@@ -3412,28 +1719,11 @@ def uncertFit(input):
             # plt.plot(data_new[0, :], data_trn[i + 1, :], '-')
 
         # Fit model
-        result_i, t_i, fit_i = fit_general(model, par_list, data_new, bnds, fixed_pars, adm0, t_trn,
-                                           t_tst, neigh, alpha_fix)
+        result_i, t_i, fit_i = fit_general(par_list, data_new, bnds, fixed_pars, adm0, t_trn,t_tst)
 
-        # Calculate goodness of fit
-        yfit_inf = fit_i[3 * n_adm:4 * n_adm]
-        r2 = [[] for i in range(0, n_adm)]
-        for i in range(0, n_adm):
-            if useGradient:
-                r2[i] = r2_score(np.gradient(data_new[i + 1, :]), np.gradient(yfit_inf[i, :]))
-            else:
-                r2[i] = r2_score(data_new[i + 1, :], yfit_inf[i, :])
+        # Accept fit
+        acceptableFit = 1
 
-        # Check
-        success_lst = [i for i in r2 if i > r2gof_threshRsq]
-        if len(success_lst) == n_adm:
-
-            # Accept fit
-            acceptableFit = 1
-        else:
-
-            # Change random seed and repeat fit
-            counter = counter + 1
 
     out = [result_i, data_new, fit_i, acceptableFit, r2]
     return out
@@ -4284,95 +2574,4 @@ def save_pars(adm0, core_name, fitted, fixed):
 
 if __name__ in "__main__":
     main()
-
-
-# No longer in use!
-def load_local_data_ILGE_MergeQuarters(the_quarter, start, end, usePangolin, pangolingStrain):
-    '''
-    Parameters
-    ----------
-    the_quarter  : the areas of interest, may be 'all'
-    start      : start date of analysis
-    end        : end date of analysis
-
-    Returns
-    --------
-    data matrix with time, n_fats, infected; and population for selected areas
-    '''
-
-    # read csv files for cases
-    os.chdir('/project/data/20200528T091303/content/epiData')
-    # os.chdir('/Users/sbrueningk/Desktop/ILGE_Data/')
-    filename = 'EpiData_ETH_censor_20200515.xlsx'
-    df = pd.read_excel(filename, 'positive')
-    df_neg = pd.read_excel(filename, 'negative')
-    os.chdir(wd)
-
-    # read soc'ioeconomic data
-    os.chdir(os.path.join(wd, 'output'))
-    # os.chdir('/Users/sbrueningk/Desktop/ILGE_Data/')
-    # filename = 'SocioeconomicScore_data.xls'
-    filename = 'bs_quarter_mapping.csv'
-    pop_df = pd.read_csv(filename)
-    os.chdir(wd)
-
-    # restrict to dates greater than starting date
-    df['ENTNAHMEDATUM'] = pd.to_datetime(df['ENTNAHMEDATUM'], format='%Y-%m-%d')
-    df['ENTNAHMEDATUM'] = df['ENTNAHMEDATUM'].dt.date
-    START = df['ENTNAHMEDATUM'] >= start
-    END = df['ENTNAHMEDATUM'] <= end
-    df = df[START & END]
-    tmp = (df['ENTNAHMEDATUM'] - start)
-    df['DELTA'] = tmp.astype('timedelta64[D]')
-    t = np.array(np.unique(df['DELTA']))
-
-    # Subset for selected adm1_pcode
-    if the_quarter == 'all':
-        pop = pop_df['POPULATION'].sum()
-    else:
-
-        # Get the quarters beloning to this ID
-        quarters = pop_df['GEBIET'].loc[pop_df['ID_PARTNER'] == the_quarter].values
-        print('Using these quarters:', quarters)
-
-        # Get population
-        pop = pop_df['POPULATION'].loc[pop_df['ID_PARTNER'] == the_quarter].sum()
-
-        try:
-            # Subset the case data
-            df = df[df['Block ID'].isin(list(quarters))]
-        except:
-            print('USing all data since subset for quarter failed!!!')
-
-    # Produce time series
-    counts_del = df['DELTA'].value_counts().values
-    labels_del = df['DELTA'].value_counts().keys().values.astype('timedelta64[D]')
-    y_new_inf = [x for _, x in sorted(zip(labels_del, counts_del))]
-    tsub = np.sort(labels_del)
-    tsub = tsub.astype('timedelta64[D]') / np.timedelta64(1, 'D')
-    for k in range(0, len(t)):
-        if t[k] not in tsub:
-            y_new_inf.insert(k, 0)
-
-    y_inf = np.cumsum(y_new_inf)
-
-    # Subset age group (not used at this stage yet)
-    sorted_counts1, sorted_labels1 = getAGE_timeSeries(df, 1)
-    sorted_counts2, sorted_labels2 = getAGE_timeSeries(df, 2)
-    sorted_counts3, sorted_labels3 = getAGE_timeSeries(df, 3)
-    sorted_counts4, sorted_labels4 = getAGE_timeSeries(df, 4)
-
-    # So far no data for fatalities
-    y_dead = []
-
-    # Summarize
-    data = []
-    data.append(t)
-    data.append(y_dead)
-    data.append(y_inf)
-    data.append(y_new_inf)
-
-    return data, pop
-
-
 
