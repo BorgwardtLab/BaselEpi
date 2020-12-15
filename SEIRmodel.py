@@ -629,8 +629,8 @@ def run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID,
     os.chdir(wd)
 
     # original and modeled data as well as figures
-    save_data_general(model, adm0, quat, n_adm, core_name, fit, t_trn, t_tst, data_trn, data_tst, \
-                      pop, start, end, result, fixed_pars, newdir=newdir, useUnrepor=useUnrepor)
+    save_data_SEUI(adm0, quat, n_adm, core_name, fit, t_trn, t_tst, data_trn, data_tst, \
+                   pop, start, end, result, fixed_pars, newdir, useUnrepor)
 
     return 0
 
@@ -1232,18 +1232,7 @@ def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
     list of values of the differentials for each compartment variable at time t
     """
     n_adm = fixed_pars[0]
-    n_cmp = fixed_pars[1]
-    t_meas = fixed_pars[2]
-    c = fixed_pars[4]
-    local = fixed_pars[5]
-    neigh = fixed_pars[7]
-    alp_fix = fixed_pars[8]
-    loadFr_dyn = fixed_pars[10]
     time_dep = fixed_pars[11]
-    useSigTran = fixed_pars[12]
-    useUnrepor = fixed_pars[13]
-    useSepTimeForRandAlpha = fixed_pars[14]
-    delta_t = fixed_pars[15]
     t_max = fixed_pars[16]
 
     # Optionally fit adjacency matrix
@@ -1262,10 +1251,8 @@ def ode_model_SEUI_SymMat(Y, t, pars, fixed_pars):
     # Mobility
     if t < t_max:
         t_dep = time_dep(t)
-        t_dep_soc = time_dep_soc(t)
     else:
         t_dep = time_dep(t_max)
-        t_dep_soc = time_dep_soc(t_max)
 
 
     alpha_use = alpha * t_dep
@@ -1729,64 +1716,8 @@ def uncertFit(input):
     return out
 
 
-# Save and plot after the fit
-def save_data_general(model, adm0, quat, n_adm, core_name, fit, t_trn, t_tst, data_trn, data_tst, pop, start, end,
-                      result, fixed_pars, newdir=[], useUnrepor=True):
-    '''Saves the data .csv files and figures per adm area. Prints R2.
-
-    Parameters
-    ----------
-    adm0      : iso3 string of the country of interest
-    adm1s     : vector with the analysed adm codes
-    n_adm     : number of analyzed admin areas
-    core_name : piece of the name of the csv file
-    fit       : fit results matrix
-    t_trn     : time points used for training
-    t_tst     : time points reseved for testing
-    data_trn  : data used for training
-    data_tst  : data reseved for testing
-    pop       : total population of the administrative area of interest
-    start     : start date of analysis
-    end       : end date of analysis
-    '''
-
-    if model == 'SEAIRD':
-        save_data(adm0, quat, n_adm, core_name, fit, t_trn, t_tst, data_trn, data_tst, \
-                  pop, start, end, result)
-    elif model == 'SEUI':
-        save_data_SEUI(adm0, quat, n_adm, core_name, fit, t_trn, t_tst, data_trn, data_tst, \
-                       pop, start, end, result, fixed_pars, newdir, useUnrepor)
-    else:
-        raise ('Invalid ODE model')
 
 
-def plot_ILGE(fit, t, n_adm, data_trn, data_tst, pop, result, model):
-    if model == 'SEAIRD':
-        yfit_inf = fit[2 * n_adm:3 * n_adm]
-        yfit_rec = fit[3 * n_adm:4 * n_adm]
-        yfit_fat = fit[4 * n_adm:5 * n_adm]
-        yfit_u = fit[7 * n_adm:8 * n_adm]
-        yfit_cuminf = yfit_inf + yfit_rec + yfit_fat
-
-        n_inf_data = data_trn[2] + data_tst[2]
-        r2_inf = r2_score(n_inf_data, np.squeeze(yfit_cuminf))
-        print('R2: ', r2_inf)
-
-        plot2(t, n_inf_data, np.squeeze(yfit_cuminf), np.squeeze(yfit_inf), np.squeeze(fit[5 * n_adm:6 * n_adm]),
-              np.squeeze(yfit_rec), np.squeeze(yfit_fat), pop, result)
-    elif model == 'SEUI':
-        yfit_inf = fit[3 * n_adm:4 * n_adm]
-        yfit_a = fit[2 * n_adm:3 * n_adm]
-        yfit_e = fit[1 * n_adm:2 * n_adm]
-
-        n_inf_data = np.array(list(data_trn[1]) + list(data_tst[1]))
-        r2_inf = r2_score(n_inf_data, np.squeeze(yfit_inf))
-        print('R2: ', r2_inf)
-
-        plot_SEUI(t, n_inf_data, np.squeeze(yfit_inf), np.squeeze(yfit_a), np.squeeze(yfit_e), pop, result)
-    else:
-        raise ('Invalid ODE model')
-    return 0
 
 
 def save_pars_ILGE(adm0, core_name, fitted, fixed, bnds, data_in):
