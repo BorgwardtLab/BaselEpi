@@ -32,13 +32,11 @@ import matplotlib.cm as cmx
 
 ### GLOBAL VARIABLE ############################################################
 wd = os.getcwd()
-r2gof_threshRsq = 0.
-useForTiles = 'MedianIncome2017'  # Choose from: 'LivingSpace', 'SENIOR_ANT','1PHouseholds','MedianIncome2017', 'random'
-useForTilesList = ['LivingSpace', '1PHouseholds', 'SENIOR_ANT','MedianIncome2017']
+useForTiles           = 'MedianIncome2017'  # Choose from: 'LivingSpace', 'SENIOR_ANT','1PHouseholds','MedianIncome2017', 'random'
+useForTilesList       = ['LivingSpace', '1PHouseholds', 'SENIOR_ANT','MedianIncome2017']
 useMultipeSeparations = False
-randomIndex = '001'
-n_jobs = 30
-n_uncert = 50              # Number of runs to test uncertainty
+n_jobs      = 30
+n_uncert    = 50              # Number of runs to test uncertainty
 
 global constantMobility
 constantMobility = False
@@ -56,9 +54,19 @@ global time_dep_soc
 global randomIndex
 randomIndex = '001'
 
+
+# Paths and filenames to be included by user
 global filenameCaseData
 filenameCaseData = 'test.csv'
 
+global filenameKalmanData
+filenameKalmanData = 'test.csv'
+
+global filenameSocioeconomicData
+filenameSocioeconomicData = 'test.csv'
+
+global filenameMobilityData
+filenameMobilityData = 'test.csv'
 
 ### MAIN #####_##################################################################
 
@@ -67,13 +75,11 @@ def main():
     # general setup
     start  = dt.date(2020, 2, 22)  # 26   # start date of analysis (CHE:2/23,DEU:1/28) - 3,7
     end    = dt.date(2020, 4, 22)  # end date of analysis
-    n_tst  = 63                       # number of days reserved for testing
     uncert = True                   # Do a crude uncertainty estimation
     run_ID = 'Test_' + useForTiles  # Name for this specific run - folder will be created in Results
     useparallel = True              # number of parallel processes (for uncertainty analysis)
-    delta_t = 14                    # time difference to the 7.3.2020 which is the date for which the time series data is normalized
 
-    print('RUNNING: ' + run_ID)
+
 
 
     # Seed only a single case (exposed) - all other quarters start from 0!
@@ -88,12 +94,6 @@ def main():
     R_infU_in_0 = 7.88  # 2.  # transmission rate caused by symptomatic infecteous cases
     T_infU_0 = 3.  # length of infectious period in days fot those who recover
     T_inc_0 = 3.  # duration of incubation period in days (global)
-    R_i_asy = .7  # Reproductive number for asymptomatic cases
-    T_i_asy = 1.768
-    p_asy = 0.88
-    bnd_R_i_asy = ((0.6, 1.),)  # ((1., 5.),)
-    bnd_T_i_asy = ((1.768, 1.768),)  # ((2., 12.),)
-    bnd_p_asy = ((0.88, 0.88),)
     bnd_R_infU_in = ((0.1, 40.),)  # ((1., 5.),)
     bnd_T_infU = ((2.1, 2.1),)
     bnd_T_inc = ((2., 2.),)
@@ -112,6 +112,7 @@ def main():
     bnd_n_unr = ((0, 0),)
 
 
+    print('RUNNING: ' + run_ID)
 
     # Make output director
     newdir = wd + '/Results/' + run_ID
@@ -127,7 +128,6 @@ def main():
                 os.mkdir('original')
                 os.mkdir('parameters')
                 os.chdir(newdir)
-
     else:
         if not os.path.exists(newdir):
             os.mkdir(newdir)
@@ -140,50 +140,39 @@ def main():
 
 
     # Actual model
-    quat = all_quat
-
     if useMultipeSeparations:
-        run_model_parallel(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID, useparallel,
-                           n_exp_0, n_inf_0, n_rec_0,n_fat_0, n_asi_0, n_asr_0, n_und_0,
-                           R_infU_in_0, T_infI_0, T_inc_0, p_sym_0, T_infU_0,
-                           bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, bnd_n_und,
-                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_sym, bnd_T_infU,
-                           n_un_i_0, n_un_r_0, bnd_n_uni, bnd_n_unr,n_splitsSoc, seedSingle,seedQuarter,delta_t)
+
+        # Optimization of all shared parameters
+        run_model_parallel(all_quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
+                           n_exp_0, n_inf_0, n_und_0, n_un_i_0, n_un_r_0,
+                           bnd_n_exp, bnd_n_inf, bnd_n_und, bnd_n_uni, bnd_n_unr,
+                           R_infU_in_0, T_infI_0, T_inc_0, T_infU_0, p_sym_0,
+                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_T_infU,bnd_p_sym,
+                           n_splitsSoc, seedSingle,seedQuarter)
     else:
-        run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID, useparallel,
-                           n_exp_0, n_inf_0, n_rec_0,n_fat_0, n_asi_0, n_asr_0, n_und_0,
-                           R_infU_in_0, T_infI_0, T_inc_0, p_sym_0, T_infU_0,
-                           bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, bnd_n_und,
-                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_sym, bnd_T_infU,
-                           n_un_i_0, n_un_r_0, bnd_n_uni, bnd_n_unr,n_splitsSoc, seedSingle,seedQuarter,delta_t)
+
+        # Run of a single partition
+        run_model(all_quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
+                           n_exp_0, n_inf_0, n_und_0, n_un_i_0, n_un_r_0,
+                           bnd_n_exp, bnd_n_inf, bnd_n_und, bnd_n_uni, bnd_n_unr,
+                           R_infU_in_0, T_infI_0, T_inc_0, T_infU_0, p_sym_0,
+                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_T_infU,bnd_p_sym,
+                           n_splitsSoc, seedSingle,seedQuarter)
 
         # Plot
-        # try:
         main_eval(run_ID)
-        # except:
-        #     print('Failed at plotting!')
 
     return None
 
 
 ### FUNCTIONS #################################################################
-def run_model_parallel(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID, useparallel,
-                           n_exp_0, n_inf_0, n_rec_0,n_fat_0, n_asi_0, n_asr_0, n_und_0,
-                           R_infU_in_0, T_infI_0, T_inc_0, p_sym_0, T_infU_0,
-                           bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, bnd_n_und,
-                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_sym, bnd_T_infU,
-                           n_un_i_0, n_un_r_0, bnd_n_uni, bnd_n_unr,n_splitsSoc, seedSingle,seedQuarter,delta_t):
-    # Correct bounds for some options
-    if not useUnrepor:
-        R_i_asy = 0  # Reproductive number for asymptomatic cases
-        T_i_asy = 0
-        p_asy = 0
-        n_un_i_0 = 0  # initially infecteous cases who will die or recover
-        n_un_r_0 = 0  # initially infecteous who will recover
-        bnd_n_uni = ((0, 0),)
-        bnd_n_unr = ((0, 0),)
-        bnd_R_i_asy = ((0, 0),)  # ((1., 5.),)
-        bnd_T_i_asy = ((0, 0),)
+def run_model_parallel(quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
+                           n_exp_0, n_inf_0, n_und_0, n_un_i_0, n_un_r_0,
+                           bnd_n_exp, bnd_n_inf, bnd_n_und, bnd_n_uni, bnd_n_unr,
+                           R_infU_in_0, T_infI_0, T_inc_0, T_infU_0, p_sym_0,
+                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_T_infU,bnd_p_sym,
+                           n_splitsSoc, seedSingle,seedQuarter):
+
 
     global useForTilesList
     global useForTiles
@@ -205,19 +194,14 @@ def run_model_parallel(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert
                        usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc, useUnrepor, delta_t)
 
         # assemble parameter list to be passed to optimizer
-        if tile == '1PHouseholds' or tile == 'Vollzeitaequivalent':
-            seedQuarter = 2
-        else:
-            seedQuarter = 1
         ind_seedQuarter = quat.index(seedQuarter)
-
         par_list = par_list_general(model, n_adm, n_exp_0, n_inf_0, n_rec_0, n_fat_0, n_asi_0,
                                     n_asr_0, n_und_0, R_infU_in_0, T_infI_0, T_inc_0, p_fat_0, R_red_0, R_redU_0,
                                     p_sym_0, R_asy_in_0, b_deR_0, a_deR_0, T_infA_0, T_infU_0, alpha_0, alpha_f,
                                     a_alpha, b_alpha, adj_el, local, neigh, alpha_fix, alphaS_0,
                                     R_i_asy, T_i_asy, p_asy, n_un_i_0, n_un_r_0, seedSingle, ind_seedQuarter)
 
-        # assemble optimization constraints
+        # assemble optimization bounds
         bnds = bnds_vars_general(n_adm, model, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr,
                                  bnd_n_und, bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_fat, bnd_R_red, bnd_R_redU,
                                  bnd_p_sym, bnd_R_asy_in, bnd_b_deR, bnd_a_deR, bnd_T_infA, bnd_T_infU, bnd_alpha,
@@ -225,12 +209,8 @@ def run_model_parallel(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert
                                  bnd_n_uni, bnd_n_unr, bnd_R_i_asy, bnd_T_i_asy, bnd_p_asy, seedSingle, ind_seedQuarter)
 
         # fixed paramters
-        if len(t_tst) > 0:
-            t_max = np.max([np.max(t_trn), np.max(t_tst)])
-        else:
-            t_max = np.max(t_trn)
-        fixed_pars = [n_adm, n_cmp, t_meas, A, int(coupled), local, pop, neigh, alpha_fix, ASoc, loadFr_dyn, time_dep,
-                      useSigTran, useUnrepor, useSepTimeForRandAlpha, delta_t, t_max]
+        t_max = np.max(t_trn)
+        fixed_pars = [n_adm, n_cmp, A, pop, time_dep, t_max]
         print(useForTiles + ' population: ' + str(pop))
 
         # Summarize:
@@ -251,6 +231,7 @@ def run_model_parallel(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert
 
     # Save for each subset
     for i_tiles, tile in enumerate(useForTilesList):
+
         # Plot
         main_eval_parallel(run_ID, tile, all_t_i[i_tiles], all_fit_i[i_tiles], all_params_out[i_tiles],
                            all_fixed_pars_out[i_tiles], all_data_trn[i_tiles], all_t_trn[i_tiles])
@@ -303,35 +284,33 @@ def fit_general_parallel(all_par_list, all_data_trn, all_bnds, all_fixed_pars, a
 
 
 def dofit_SEUI_parallel(all_par_list, all_data_train, all_bnds, all_fixed_pars, adm0):
+
+    # Get fixed parameters
     fixed_pars_list = all_fixed_pars[0]
     fixed_pars_list.append(len(all_par_list))  # save number of separations
     n_adm = fixed_pars_list[0]
     n_cmp = fixed_pars_list[1]
 
+    # Get parameters and reorganize
     par_list = all_par_list[0][n_adm * (n_cmp - 1):]
     n_parameters = len(par_list)
     bnds_list = list(all_bnds[0])[n_adm * (n_cmp - 1):]
-    startCon_list = all_par_list[0][:n_adm * (n_cmp - 1)]
+    startCon_list      = all_par_list[0][:n_adm * (n_cmp - 1)]
     startCon_bnds_list = list(all_bnds[0])[:n_adm * (n_cmp - 1)]
     for i in range(1, len(all_par_list)):
+
         # get parameter set for this separation
         pars = all_par_list[i]
         bnds = all_bnds[i]
         fixed_pars = all_fixed_pars[i]
 
         # Other fit parameters specific to each separation
-        b_deR = pars[n_adm * (n_cmp - 1) + 2 * n_adm + 1:n_adm * (n_cmp - 1) + 3 * n_adm + 1]
-        a_deR = pars[n_adm * (n_cmp - 1) + 3 * n_adm + 1:n_adm * (n_cmp - 1) + 4 * n_adm + 1]
         R_infU_in = pars[n_adm * (n_cmp - 1):n_adm * (n_cmp - 1) + n_adm]
-        R_redU_frac = pars[n_adm * (n_cmp - 1) + n_adm + 1:n_adm * (n_cmp - 1) + (n_adm + 1) + n_adm]
         startingCond = pars[:n_adm * (n_cmp - 1)]
         startCon_list = startCon_list + startingCond
         par_list = par_list + b_deR + a_deR + R_infU_in + R_redU_frac
 
-        bnds_b_deR = list(bnds[n_adm * (n_cmp - 1) + 2 * n_adm + 1:n_adm * (n_cmp - 1) + 3 * n_adm + 1])
-        bnds_a_deR = list(bnds[n_adm * (n_cmp - 1) + 3 * n_adm + 1:n_adm * (n_cmp - 1) + 4 * n_adm + 1])
         bnds_R_infU_in = list(bnds[n_adm * (n_cmp - 1):n_adm * (n_cmp - 1) + n_adm])
-        bnds_R_redU_frac = list(bnds[n_adm * (n_cmp - 1) + n_adm + 1:n_adm * (n_cmp - 1) + (n_adm + 1) + n_adm])
         bnds_list = bnds_list + bnds_b_deR + bnds_a_deR + bnds_R_infU_in + bnds_R_redU_frac
         startCon_bnds_list = startCon_bnds_list + list(bnds[:n_adm * (n_cmp - 1)])
 
@@ -340,10 +319,10 @@ def dofit_SEUI_parallel(all_par_list, all_data_train, all_bnds, all_fixed_pars, 
         fixed_pars_list.append(Adj)
         fixed_pars_list.append(fixed_pars[6])
 
-    # fixed_pars_list.append(len(par_list))
-    par_list = startCon_list + par_list
+
+    par_list  = startCon_list + par_list
     bnds_list = startCon_bnds_list + bnds_list
-    bnds_tpl = tuple(bnds_list)
+    bnds_tpl  = tuple(bnds_list)
     fixed_pars_list.append(n_parameters)
 
     result = \
@@ -354,9 +333,6 @@ def dofit_SEUI_parallel(all_par_list, all_data_train, all_bnds, all_fixed_pars, 
                  bounds=bnds_tpl, \
                  # tol=1e-5, \
                  options={'gtol': 1e-8, 'ftol': 1e-8, 'disp': True, 'maxiter': 200})
-
-    with open(str(useForTilesList) + '_results.pkl', 'wb') as f:
-        pickle.dump(result, f, pickle.HIGHEST_PROTOCOL)
 
     return result, n_parameters
 
@@ -395,12 +371,12 @@ def solution_SEUI_parallel(t, par_list, fixed_pars):
     return sol
 
 
-def run_model(quat, newdir, t_meas, n_tst, start, end, uncert, n_uncert, run_ID, useparallel,
-                           n_exp_0, n_inf_0, n_rec_0,n_fat_0, n_asi_0, n_asr_0, n_und_0,
-                           R_infU_in_0, T_infI_0, T_inc_0, p_sym_0, T_infU_0,
-                           bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, bnd_n_und,
-                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_sym, bnd_T_infU,
-                           n_un_i_0, n_un_r_0, bnd_n_uni, bnd_n_unr,n_splitsSoc, seedSingle,seedQuarter,delta_t):
+def run_model(quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
+                           n_exp_0, n_inf_0, n_und_0, n_un_i_0, n_un_r_0,
+                           bnd_n_exp, bnd_n_inf, bnd_n_und, bnd_n_uni, bnd_n_unr,
+                           R_infU_in_0, T_infI_0, T_inc_0, T_infU_0, p_sym_0,
+                           bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_T_infU,bnd_p_sym,
+                           n_splitsSoc, seedSingle,seedQuarter):
     # Correct bounds for some options
     if not useUnrepor:
         R_i_asy = 0  # Reproductive number for asymptomatic cases
