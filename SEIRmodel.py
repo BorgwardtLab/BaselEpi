@@ -68,6 +68,10 @@ filenameSocioeconomicData = 'test.csv'
 global filenameMobilityData
 filenameMobilityData = 'test.csv'
 
+# Mobility graphs for each mode of transport of 'publ', 'bike', 'moto', 'foot' - one csv file each
+global filenameSocioeconomicGraphData
+filenameSocioeconomicGraphData = 'test'
+
 ### MAIN #####_##################################################################
 
 def main():
@@ -190,23 +194,16 @@ def run_model_parallel(quat, newdir,start, end, uncert, n_uncert, run_ID, usepar
 
         # corresponding setup details
         n_cmp, A, n_adm, t_trn, t_tst, data_trn, data_tst, pop, ASoc, time_dep, data_trn_abs = \
-            setup_ILGE(lvl, coupled, local, t_meas, n_tst, start, end, mode, quat, model, neigh, useSoc, loadFr_dyn,
-                       usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc, useUnrepor, delta_t)
+            setup(quat, start, end, n_splitsSoc)
 
         # assemble parameter list to be passed to optimizer
         ind_seedQuarter = quat.index(seedQuarter)
-        par_list = par_list_general(model, n_adm, n_exp_0, n_inf_0, n_rec_0, n_fat_0, n_asi_0,
-                                    n_asr_0, n_und_0, R_infU_in_0, T_infI_0, T_inc_0, p_fat_0, R_red_0, R_redU_0,
-                                    p_sym_0, R_asy_in_0, b_deR_0, a_deR_0, T_infA_0, T_infU_0, alpha_0, alpha_f,
-                                    a_alpha, b_alpha, adj_el, local, neigh, alpha_fix, alphaS_0,
-                                    R_i_asy, T_i_asy, p_asy, n_un_i_0, n_un_r_0, seedSingle, ind_seedQuarter)
+        par_list = par_list_general(n_adm, n_exp_0, n_inf_0, n_und_0, R_infU_in_0, T_inc_0, T_infU_0, T_i_asy, p_asy,
+                     n_un_i_0, n_un_r_0, seedSingle,ind_seedQuarter)
 
         # assemble optimization bounds
-        bnds = bnds_vars_general(n_adm, model, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr,
-                                 bnd_n_und, bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_fat, bnd_R_red, bnd_R_redU,
-                                 bnd_p_sym, bnd_R_asy_in, bnd_b_deR, bnd_a_deR, bnd_T_infA, bnd_T_infU, bnd_alpha,
-                                 bnd_alpha_f, bnd_a_alpha, bnd_b_alpha, bnd_adj_el, local, neigh, alpha_fix, bnd_alphaS,
-                                 bnd_n_uni, bnd_n_unr, bnd_R_i_asy, bnd_T_i_asy, bnd_p_asy, seedSingle, ind_seedQuarter)
+        bnds = bnds_vars_general(n_adm, bnd_n_exp, bnd_n_inf,bnd_n_und, bnd_R_infU_in, bnd_T_inc, bnd_T_infU,
+                      bnd_n_uni, bnd_n_unr, bnd_T_i_asy, bnd_p_asy, seedSingle, seedQuarter)
 
         # fixed paramters
         t_max = np.max(t_trn)
@@ -390,24 +387,16 @@ def run_model(quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
         bnd_T_i_asy = ((0, 0),)
 
     # corresponding setup details
-    n_cmp, A, n_adm, t_trn, t_tst, data_trn, data_tst, pop, ASoc, time_dep, data_trn_abs = \
-        setup_ILGE(lvl, coupled, local, t_meas, n_tst, start, end, mode, quat, model, neigh, useSoc, loadFr_dyn,
-                   usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc, useUnrepor, delta_t)
+    n_cmp, A, n_adm, t_trn, t_tst, data_trn, data_tst, pop, ASoc, time_dep, data_trn_abs = setup(quat, start, end, n_splitsSoc)
 
     # assemble parameter list to be passed to optimizer
     ind_seedQuarter = quat.index(seedQuarter)
-    par_list = par_list_general(model, n_adm, n_exp_0, n_inf_0, n_rec_0, n_fat_0, n_asi_0,
-                                n_asr_0, n_und_0, R_infU_in_0, T_infI_0, T_inc_0, p_fat_0, R_red_0, R_redU_0,
-                                p_sym_0, R_asy_in_0, b_deR_0, a_deR_0, T_infA_0, T_infU_0, alpha_0, alpha_f,
-                                a_alpha, b_alpha, adj_el, local, neigh, alpha_fix, alphaS_0,
-                                R_i_asy, T_i_asy, p_asy, n_un_i_0, n_un_r_0, seedSingle, ind_seedQuarter)
+    par_list = par_list_general(n_adm, n_exp_0, n_inf_0, n_und_0, R_infU_in_0, T_inc_0, T_infU_0, T_i_asy, p_asy,
+                     n_un_i_0, n_un_r_0, seedSingle,ind_seedQuarter)
 
     # assemble optimization constraints
-    bnds = bnds_vars_general(n_adm, model, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr,
-                             bnd_n_und, bnd_R_infU_in, bnd_T_infI, bnd_T_inc, bnd_p_fat, bnd_R_red, bnd_R_redU,
-                             bnd_p_sym, bnd_R_asy_in, bnd_b_deR, bnd_a_deR, bnd_T_infA, bnd_T_infU, bnd_alpha,
-                             bnd_alpha_f, bnd_a_alpha, bnd_b_alpha, bnd_adj_el, local, neigh, alpha_fix, bnd_alphaS,
-                             bnd_n_uni, bnd_n_unr, bnd_R_i_asy, bnd_T_i_asy, bnd_p_asy, seedSingle, ind_seedQuarter)
+    bnds = bnds_vars_general(n_adm, bnd_n_exp, bnd_n_inf,bnd_n_und, bnd_R_infU_in, bnd_T_inc, bnd_T_infU,
+                      bnd_n_uni, bnd_n_unr, bnd_T_i_asy, bnd_p_asy, seedSingle, seedQuarter)
 
     # fixed paramters
     if len(t_tst) > 0:
@@ -612,7 +601,7 @@ def run_model(quat, newdir,start, end, uncert, n_uncert, run_ID, useparallel,
 
 
 # Load data
-def setup_ILGE(n_tst, start, end, quarter, n_splitsSoc, delta_t):
+def setup(quarter, start, end):
     """Does the general setup based on user input.
 
     Parameters
@@ -645,44 +634,40 @@ def setup_ILGE(n_tst, start, end, quarter, n_splitsSoc, delta_t):
 
 
     # Get mobility time dependece
-    # Load time searies - starts on 1.2.2020
-    df_timedep = pd.read_csv(os.path.join(wd, 'output', 'bs_full_traffic_model_timeseries.csv'))
+    # Load mobility time series - starts on 1.2.2020
+    df_timedep   = pd.read_csv(filenameMobilityData)
     n_travelling = df_timedep['total'].values[:-2]
 
-    # Get the correct time frame and normalize by median number of travellers in Feb 2020
-    # Starting 6.2. - relative to 7.3.
-    time = 7 * df_timedep.index.values[:-2] - 30 + delta_t
+    # Get the time frame in days and normalize by median number of travellers
+    time     = 7 * df_timedep.index.values[:-2]
     time_dep = UnivariateSpline(time, n_travelling)
     time_dep.set_smoothing_factor(0.0001)
 
     # Social interaction
-    df_Kalman    = pd.read_csv(os.path.join(wd, 'kalman', 'bs_kalman_Reff.csv'))
+    df_Kalman    = pd.read_csv(filenameKalmanData)
     time_Kalman  = np.arange(0, 57)  # df_Kalman['timestamp'].values
     R_estimate   = df_Kalman['R_estimate'].values
 
-    if delta_t != 10:
-        R_estimate = np.array(list(R_estimate[0] * np.ones(delta_t - 10, )) + list(R_estimate))
-        time_Kalman = np.arange(0, len(R_estimate))
-
+    # Get scores
     alpha_mob = time_dep(time_Kalman)
-    y_Kalman = R_estimate / alpha_mob
-    y_soc = y_Kalman / np.max(y_Kalman)
+    y_Kalman  = R_estimate / alpha_mob
+    y_soc     = y_Kalman / np.max(y_Kalman)
     global time_dep_soc
     time_dep_soc = UnivariateSpline(time_Kalman, y_soc, s=0.03)
 
 
-    # parse the input data to the right format
-    t_trn, t_tst, data_trn, data_tst, pop, data_trn_abs = \
-        obtain_data_ILGE(quarter, n_tst, n_adm, start, end, usePangolin, pangolingStrain, mergeQuatSoc, n_splitsSoc)
+    # parse the input data
+    t_trn, data_trn, pop = \
+        obtain_data_ILGE(quarter, n_adm, start, end)
 
     # obtain adjacency matrix and number of admin areas analyzed
-    A = obtain_adjacencyILGE(quarter, neigh, n_splitsSoc)
+    A = obtain_adjacencyILGE(quarter)
 
 
     return n_cmp, A, n_adm, t_trn, t_tst, data_trn, data_tst, pop, ASoc, time_dep, data_trn_abs
 
 
-def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, n_splitsSoc):
+def obtain_data_ILGE(quarter, n_adm, start, end):
     """Obtains the dataset in the right format to be passed to optimizer.
 
     Parameters
@@ -705,36 +690,25 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, n_splitsSoc):
     # allocation
     data_inf_trn = np.array([])
     data_inf_trn_cum = np.array([])
-    data_inf_tst = np.array([])
-    data_inf_tst_cum = np.array([])
     pop = []
 
     for j, c in enumerate(quarter):
-        print(c)
 
         data, subpop = load_data(c, start, end)
-
         if j == 0:
-            if (n_tst > data[0][-1]):
-                print('\nTest set larger than total dataset!\n')
             t_trn = data[0][:n_tst]
-            t_tst = data[0][n_tst:]
 
+        # Population of this quarter
         pop.append(subpop)
 
-        # data (1st column is time, the rest are dead and infected, in couples)
+        # Cases in this quarter: 1st column is time, the rest are cum. numbers of infected
         data_inf_trn_cum = np.concatenate((data_inf_trn_cum, data[2][:n_tst]))
-        data_inf_tst_cum = np.concatenate((data_inf_tst_cum, data[2][n_tst:]))
-        data_inf_trn = np.concatenate((data_inf_trn, data[3][:n_tst]))
-        data_inf_tst = np.concatenate((data_inf_tst, data[3][n_tst:]))
+        data_inf_trn     = np.concatenate((data_inf_trn, data[3][:n_tst]))
 
 
-    # training data: first row is time, then cummulative number of cases
+    # Fit Data: first row is time, then cummulative number of cases
     inf_trn = data_inf_trn.reshape(n_adm, len(t_trn))
     inf_trn_cum = data_inf_trn_cum.reshape(n_adm, len(t_trn))
-
-    # test data
-    inf_tst = data_inf_tst.reshape(n_adm, len(t_tst))
 
 
     # Impute missing data for the 29, 30, 31 of march
@@ -771,11 +745,11 @@ def obtain_data_ILGE(quarter, n_tst, n_adm, start, end, n_splitsSoc):
         inf_trn_cum7av_noImp[q, :] = y_inf_7av_noImp
         inf_trn_7av_noImp[q, :] = y_inf_new_7av_noImp
 
+    # Final dataset
     data_trn = np.concatenate((t_trn[None, :], inf_trn_cum7av), axis=0)
-    data_tst = np.concatenate((t_tst[None, :], inf_tst), axis=0)
-    data_trn_abs = np.concatenate((t_trn[None, :], inf_trn_7av), axis=0)
 
-    return t_trn, t_tst, data_trn, data_tst, pop, data_trn_abs
+
+    return t_trn, data_trn, pop
 
 
 def load_data(the_quarter, start, end):
@@ -883,38 +857,16 @@ def load_data(the_quarter, start, end):
     return data, pop, baselstrain
 
 
-def obtain_adjacencyILGE(quarter, neigh, n_splitsSoc):
+def obtain_adjacencyILGE(quarter):
     global useForTiles
 
+    # Load mobility data for each transport mode, sum all
     transport_means = ['publ', 'bike', 'moto', 'foot']
-    name_suffix     = 'percentiles'
-
     for i, tr in enumerate(transport_means):
 
-        if useForTiles == 'MedianIncome2017':
-            file = os.path.join(wd, 'graphs', 'bs_MedianIncome2017_' + str(
-                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-        elif useForTiles == 'SENIOR_ANT':
-            file = os.path.join(wd, 'graphs', 'bs_SENIOR_ANT_' + str(
-                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-        elif useForTiles == 'LivingSpace':
-            file = os.path.join(wd, 'graphs', 'bs_Living_space_per_Person_2017_' + str(
-                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-        elif useForTiles == 'random':
-            file = os.path.join(wd, 'graphs', 'bs_random_' + str(
-                n_splitsSoc) + 'tiles_' + randomIndex + '_' + tr + '_mobility.csv')
-        else:
-            file = os.path.join(wd, 'graphs', 'bs_' + useForTiles + '_' + str(
-                n_splitsSoc) + name_suffix + '_' + tr + '_mobility.csv')
-
-        A_all = pd.read_csv(file)
-
-        if quarter[0] == 'all':
-            A_tr = A_all
-        else:
-            A_tr = A_all[[str(i) for i in ['Unnamed: 0'] + quarter]].sort_values(by=['Unnamed: 0'])
-            A_tr = A_tr.set_index('Unnamed: 0')
-            A_tr = A_tr.loc[quarter, :]
+        file = filenameSocioeconomicGraphData + '_' + tr + '.csv'
+        A_tr = pd.read_csv(file)
+        A_tr = A_tr.loc[quarter, :]
 
         # Sum up
         if i == 0:
@@ -943,14 +895,13 @@ def par_list_general(n_adm, n_exp_0, n_inf_0, n_und_0, R_infU_in_0, T_inc_0, T_i
     return par_list
 
 
-def bnds_vars_general(n_adm, bnd_n_exp, bnd_n_inf, bnd_n_rec, bnd_n_fat, bnd_n_asi, bnd_n_asr, \
-                      bnd_n_und, bnd_R_infU_in, bnd_T_inc, bnd_T_infU,
+def bnds_vars_general(n_adm, bnd_n_exp, bnd_n_inf,bnd_n_und, bnd_R_infU_in, bnd_T_inc, bnd_T_infU,
                       bnd_n_uni, bnd_n_unr, bnd_T_i_asy, bnd_p_asy, seedSingle, seedQuarter):
 
     bnds_lst = [bnd_n_exp, bnd_n_inf, bnd_n_und]
-    bnds  = bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarter)
+    bnds     = bnds_vars_SEUI(n_adm, bnds_lst, bnd_n_uni, bnd_n_unr, seedSingle, seedQuarter)
 
-    bnds += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_T_infU + bnd_T_i_asy + bnd_p_asy
+    bnds    += bnd_R_infU_in * n_adm + bnd_T_inc + bnd_T_infU + bnd_T_i_asy + bnd_p_asy
 
     return bnds
 
@@ -1023,165 +974,12 @@ def fit_general(par_list, data_trn, bnds, fixed_pars, adm0, t_trn, t_tst):
 
     result = dofit_SEUI(par_list, data_trn, bnds, fixed_pars, adm0)
 
-    # optain curve resulting from optimization
+    # obtain curve resulting from optimization
     t = np.concatenate((t_trn, t_tst))
     fit = solution_SEUI(t, result.x, fixed_pars).T
 
 
     return result, t, fit
-
-
-def ode_model_SEUI(Y, t, pars, fixed_pars):
-    """ODE model. The order of compartments in Y is s, e, i, r, d, a, ar, i2,
-    repeated for the number of considered nodes. If 3 adm1 areas are cosidered,
-    than y is: s1, s2, s3, e1, e2, ... and so on.
-
-    Parameters
-    ----------
-    Y          : vector containing the values of the state variables:
-    t          : time vector
-    pars       : vector containing the model parameters' current values
-    fixed_pars : vector containing the fixed parameters
-
-    Returns
-    -------
-    list of values of the differentials for each compartment variable at time t
-    """
-
-    n_adm = fixed_pars[0]
-    c = fixed_pars[4]
-    local = fixed_pars[5]
-    neigh = fixed_pars[7]
-    alp_fix = fixed_pars[8]
-    loadFr_dyn = fixed_pars[10]
-    time_dep = fixed_pars[11]
-    useSigTran = fixed_pars[12]
-    useUnrepor = fixed_pars[13]
-    useSepTimeForRandAlpha = fixed_pars[14]
-    delta_t = fixed_pars[15]
-    t_max = fixed_pars[16]
-    time_depSoc = fixed_pars[17]
-
-    # Adjacency matrix
-    Adj = np.array(fixed_pars[3])
-
-    # Other fit parameters
-    R_infU_in = pars[:n_adm]
-    T_inc = pars[n_adm]
-    R_redU_frac = pars[n_adm + 1:(n_adm + 1) + n_adm]
-    b_deR = pars[2 * n_adm + 1:3 * n_adm + 1][0]
-    a_deR = pars[3 * n_adm + 1:4 * n_adm + 1][0]
-    T_infU = pars[4 * n_adm + 1]
-    alpha = pars[4 * n_adm + 2]
-    alphaS_us = pars[4 * n_adm + 3]
-    R_inf_Ui_in = pars[4 * n_adm + 4:5 * n_adm + 4]
-    T_inf_Ui = pars[5 * n_adm + 4]
-    p_unr = pars[5 * n_adm + 5]
-
-    # time dependence for measures taken on R
-    try:
-        if t < t_max:
-            t_dep = time_dep(t)
-        else:
-            t_dep = time_dep(t_max)
-
-        alpha_use = alpha * t_dep
-
-        if useSigmoid:
-            R_redU = R_redU_frac * R_infU_in
-            R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp((t - a_deR) / b_deR)) + R_redU
-            # R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp(t - a_deR) / b_deR) + R_redU
-        else:
-            R_infU = R_infU_in * time_depSoc(t)  # timeDep_R(R_infU_in, R_redU_frac, t_dep)
-
-        if useRelativeR:
-            for i_tile in range(1, n_adm):
-                R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
-
-        R_inf_Ui = R_infU
-    except:
-        print("Interpolation failed for this time: ")
-        print(t)
-
-    if constantMobility:
-        alpha_use = alpha
-
-        if zeroMobility:
-            alpha_use = 0
-
-    if constantR:
-        R_infU = R_infU_in
-        if useRelativeR:
-            for i_tile in range(1, n_adm):
-                R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
-
-        R_inf_Ui = R_infU_in
-
-    # Multiply with Adj
-    M = Adj * alpha_use
-
-    # compartments of each admin area
-    s = Y[0 * n_adm:1 * n_adm]
-    e = Y[1 * n_adm:2 * n_adm]
-    u = Y[2 * n_adm:3 * n_adm]
-    i = Y[3 * n_adm:4 * n_adm]
-    u_i = Y[4 * n_adm:5 * n_adm]
-    u_r = Y[5 * n_adm:6 * n_adm]
-    n = s + e + i + u + u_i + u_r
-
-    newInf = np.zeros((s.shape))
-    stot = np.zeros((s.shape))
-    utot = np.zeros((s.shape))
-    u_itot = np.zeros((s.shape))
-    ntot = np.zeros((s.shape))
-    all_quats = list(np.arange(n_adm))
-    for k in all_quats:
-        stot[k] = s[k] - np.sum(M[k, :] * s[k])
-        utot[k] = np.sum(M[:, k] * u) - np.sum(M[k, :] * u[k]) + u[k]
-        u_itot[k] = np.sum(M[:, k] * u_i) - np.sum(M[k, :] * u_i[k]) + u_i[k]
-        ntot[k] = np.sum(M[:, k] * n) - np.sum(M[k, :] * n[k]) + n[k]
-
-    if RperTilefix:
-        for k in range(0, n_adm):
-            newInf[k] = 1. / T_infU * stot[k] / ntot[k] * R_infU[k] * utot[k] + \
-                        1. / T_inf_Ui * stot[k] / ntot[k] * R_inf_Ui[k] * u_itot[k]
-
-            for l in range(0, n_adm):
-                newInf[k] = newInf[k] + 1. / T_infU * s[k] / ntot[l] * R_infU[l] * utot[l] * M[k, l] + \
-                            + 1. / T_inf_Ui * s[k] / ntot[l] * R_inf_Ui[l] * u_itot[l] * M[k, l]
-    else:
-        for k in range(0, n_adm):
-            newInf[k] = 1. / T_infU * stot[k] / ntot[k] * (
-                        np.sum(R_infU * M[:, k] * u) + R_infU[k] * (-np.sum(M[k, :] * u[k]) + u[k])) + \
-                        1. / T_inf_Ui * stot[k] / ntot[k] * (np.sum(R_inf_Ui * M[:, k] * u_i) + R_inf_Ui[k] * (
-                        -np.sum(M[k, :] * u_i[k]) + u_i[k]))
-            for l in range(0, n_adm):
-                newInf[k] = newInf[k] + 1. / T_infU * s[k] * M[k, l] / ntot[l] * (
-                            np.sum(R_infU * M[:, k] * u) + R_infU[l] * (-np.sum(M[l, :] * u[l]) + u[l])) \
-                            + 1. / T_inf_Ui * s[k] * M[k, l] / ntot[l] * (
-                                        np.sum(R_inf_Ui * M[k, l] * u_i) + R_inf_Ui[l] * (
-                                            -np.sum(M[l, :] * u_i[l]) + u_i[l])) \
- \
-                    # Susceptibles: Add - diffusion term to E - diffusion term to A
-    dsdt = -newInf
-
-    # Exposed - not infectious
-    dedt = newInf - np.multiply(1. / T_inc, e)
-
-    # Infectious prior to symptom onset
-    dudt = np.multiply(1 / T_inc, e) - np.multiply(1 / T_infU, u)
-
-    # Reported infected - assumed to be isolated
-    didt = (1 - p_unr) * np.multiply(1 / T_infU, u)
-
-    # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
-    du_idt = p_unr * np.multiply(1 / T_infU, u) - np.multiply(1 / T_inf_Ui, u_i) \
- \
-        # Unreported recovered - account for duration of infectious periode
-    du_rdt = np.multiply(1 / T_inf_Ui, u_i)
-
-    # output has to have shape
-    return np.concatenate((dsdt, dedt, dudt, didt, du_idt, du_rdt))
 
 
 def socFun(t):
@@ -1319,54 +1117,33 @@ def ode_model_SEUI_parallel(Y, t, pars, fixed_pars):
     list of values of the differentials for each compartment variable at time t
     """
     n_adm = fixed_pars[0]
-    c = fixed_pars[4]
-    local = fixed_pars[5]
-    neigh = fixed_pars[7]
-    alp_fix = fixed_pars[8]
-    loadFr_dyn = fixed_pars[10]
     time_dep = fixed_pars[11]
-    useSigTran = fixed_pars[12]
-    useUnrepor = fixed_pars[13]
-    delta_t = fixed_pars[15]
     t_max = fixed_pars[16]
-    AdjSoc = 0
 
     n_separations = fixed_pars[17]
-    n_parameters = fixed_pars[-1]
+    n_parameters  = fixed_pars[-1]
 
     # Parameters shared between separations
-    alpha = pars[4 * n_adm + 2]
-    alphaS_us = pars[4 * n_adm + 3]
+    alpha = 1
     T_infU = pars[4 * n_adm + 1]
     T_inf_Ui = pars[5 * n_adm + 4]
     T_inc = pars[n_adm]
-    p_unr_in = pars[5 * n_adm + 5]
+    p_unr = pars[5 * n_adm + 5]
 
     for i_ind in range(0, n_separations):
 
         # Optionally fit adjacency matrix
         if i_ind == 0:
+
             # Other fit parameters specific to each separation
-            b_deR = pars[2 * n_adm + 1:3 * n_adm + 1][0]
-            a_deR = pars[3 * n_adm + 1:4 * n_adm + 1][0]
             R_infU_in = pars[:n_adm]
-            R_redU_frac = pars[n_adm + 1:(n_adm + 1) + n_adm]
             Adj = fixed_pars[3]
         else:
 
             # Other fit parameters specific to each separation
-            b_deR = pars[(i_ind - 1) * 4 * n_adm + n_parameters:(i_ind - 1) * 4 * n_adm + n_parameters + n_adm][0]
-            a_deR = \
-            pars[(i_ind - 1) * 4 * n_adm + n_parameters + n_adm:(i_ind - 1) * 4 * n_adm + n_parameters + 2 * n_adm][0]
-            R_infU_in = pars[(i_ind - 1) * 4 * n_adm + n_parameters + 2 * n_adm:(
-                                                                                            i_ind - 1) * 4 * n_adm + n_parameters + 3 * n_adm]
-            R_redU_frac = pars[(i_ind - 1) * 4 * n_adm + n_parameters + 3 * n_adm:(
-                                                                                              i_ind - 1) * 4 * n_adm + n_parameters + 4 * n_adm]
+            R_infU_in = pars[(i_ind - 1) * 4 * n_adm + n_parameters + 2 * n_adm:(i_ind - 1) * 4 * n_adm + n_parameters + 3 * n_adm]
             Adj = fixed_pars[18 + (i_ind - 1) * 2]
 
-            if useSame_ab:
-                b_deR = pars[2 * n_adm + 1:3 * n_adm + 1]
-                a_deR = pars[3 * n_adm + 1:4 * n_adm + 1]
 
         # Time dependence of mobility
         if t < t_max:
@@ -1375,49 +1152,14 @@ def ode_model_SEUI_parallel(Y, t, pars, fixed_pars):
             t_dep = time_dep(t_max)
         alpha_use = alpha * t_dep
 
-        # Unreported cases
-        if useVariable_p_unr:
-            p_unr = p_unr_in * sigmoid_p(0.9999 / p_unr_in, R_inf_Ui_in[0], a_deR, b_deR, t)  # ratio_time_dep(t)
-        else:
-            p_unr = p_unr_in
 
         # time dependence for measures taken on R
-        if useSigmoid:
-            raise ('CODE NOT CHECKED!!!')
-            if useMultiplicModel:
-                alpha_soc = sigmoid_R(1., R_redU_frac[0], a_deR, b_deR, t)
-                R_infU = R_infU_in * alpha_soc
-            else:
-                R_redU = R_redU_frac * R_infU_in
-                # R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp(t - a_deR) / b_deR) + R_redU
-                R_infU = (R_infU_in - R_redU) / (np.ones(n_adm) + np.exp((t - a_deR) / b_deR)) + R_redU
-        else:
-            if useMultiplicModel:
-                if useStretchSocial:
-                    stretch = 0.19 * alphaS_us
-                else:
-                    stretch = 0
+        R_infU = socFun(t) * R_infU_in
 
-                if useHomeReproductive:
-                    R_infU_mob = stretchFun(t, 51, stretch) * R_redU_frac[0]
-                    R_inf_Ui_mob = stretchFun(t, 51, stretch) * R_redU_frac[0]
-                    R_inf_U_base = R_infU_in.copy()
-                    R_inf_Ui_base = R_infU_in.copy()
-                    R_infU = 0
-                else:
-                    R_infU = stretchFun(t, 51, stretch) * R_infU_in
-            else:
-                R_infU = timeDep_R(R_infU_in, R_redU_frac, t_dep)
 
         # Relative reproductive number
-        if useRelativeR:
-            if useHomeReproductive:
-                for i_tile in range(1, n_adm):
-                    R_inf_U_base[i_tile] = R_inf_U_base[0] * R_infU_in[i_tile]
-                    R_inf_Ui_base[i_tile] = R_inf_Ui_base[0] * R_infU_in[i_tile]
-            else:
-                for i_tile in range(1, n_adm):
-                    R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
+        for i_tile in range(1, n_adm):
+            R_infU[i_tile] = R_infU[0] * R_infU_in[i_tile]
 
         # Constant mobility
         if constantMobility:
@@ -1427,85 +1169,46 @@ def ode_model_SEUI_parallel(Y, t, pars, fixed_pars):
 
         # Constant social interaction
         if constantR:
-            if useHomeReproductive:
-                R_infU_mob
-                R_inf_Ui_mob
-                R_inf_U_base
-                R_inf_Ui_base
+            R_infU[0] = R_infU_in[0].copy()
+            for i_tile in range(1, n_adm):
+                R_infU[i_tile] = R_infU_in[0] * R_infU_in[i_tile]
 
-            else:
-                if useRelativeR:
-                    R_infU[0] = R_infU_in[0].copy()
-                    for i_tile in range(1, n_adm):
-                        R_infU[i_tile] = R_infU_in[0] * R_infU_in[i_tile]
-                else:
-                    R_infU = R_infU_in.copy()
 
         # Same reproductive number for U and U_i
         R_inf_Ui = R_infU
 
         # compartments
-        s = Y[i_ind * 6 * n_adm + 0 * n_adm:i_ind * 6 * n_adm + 1 * n_adm]
-        e = Y[i_ind * 6 * n_adm + 1 * n_adm:i_ind * 6 * n_adm + 2 * n_adm]
-        u = Y[i_ind * 6 * n_adm + 2 * n_adm:i_ind * 6 * n_adm + 3 * n_adm]
-        i = Y[i_ind * 6 * n_adm + 3 * n_adm:i_ind * 6 * n_adm + 4 * n_adm]
+        s   = Y[i_ind * 6 * n_adm + 0 * n_adm:i_ind * 6 * n_adm + 1 * n_adm]
+        e   = Y[i_ind * 6 * n_adm + 1 * n_adm:i_ind * 6 * n_adm + 2 * n_adm]
+        u   = Y[i_ind * 6 * n_adm + 2 * n_adm:i_ind * 6 * n_adm + 3 * n_adm]
+        i   = Y[i_ind * 6 * n_adm + 3 * n_adm:i_ind * 6 * n_adm + 4 * n_adm]
         u_i = Y[i_ind * 6 * n_adm + 4 * n_adm:i_ind * 6 * n_adm + 5 * n_adm]
         u_r = Y[i_ind * 6 * n_adm + 5 * n_adm:i_ind * 6 * n_adm + 6 * n_adm]
         n = s + e + u + i + u_i + u_r
 
-        if useReortingDelay:
-            raise ('Option useReortingDelay not supported!')
+        # Susceptibles
+        dsdt = - np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
+               - np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
 
-        if useHomeReproductive:
-            raise ('Option useHomeReproductive not supported!')
-
-        if useMultiplicModel:
-            dsdt = - np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                   - np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
-
-            # Exposed - not infectious
-            dedt = - np.multiply(1 / T_inc, e) \
-                   + np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
-                   + np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
+        # Exposed - not infectious
+        dedt = - np.multiply(1 / T_inc, e) \
+               + np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u))) \
+               + np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))
 
 
-        else:
-            raise ('Have to use multiplicative model!')
-
-            # Susceptibles: Add - diffusion term to E - diffusion term to A
-            dsdt = - np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-                   - c * (np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u)))) \
-                   - np.multiply(np.multiply(R_inf_Ui / T_inf_Ui, u_i), s / n) \
-                   - c * (np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))) \
- \
-                # Exposed - not infectious
-            dedt = np.multiply(np.multiply(R_infU / T_infU, u), s / n) \
-                   - np.multiply(1 / T_inc, e) \
-                   + np.multiply(np.multiply(R_inf_Ui / T_inf_Ui, u_i), s / n) \
-                   + c * (np.multiply(alpha_use * s * R_infU / (n), np.dot(Adj, np.multiply(1. / T_infU, u)))) \
-                   + c * (np.multiply(alpha_use * s * R_inf_Ui / (n), np.dot(Adj, np.multiply(1. / T_inf_Ui, u_i)))) \
- \
-                # Infectious prior to symptom onset
+        # Presymptomatic
         dudt = np.multiply(1 / T_inc, e) - np.multiply(1 / T_infU, u)
+
 
         # Reported infected - assumed to be isolated
         didt = (1 - p_unr) * np.multiply(1 / T_infU, u)
-        if np.any(didt < 0):
-            print('SOMETHING IS WRONG!!!')
 
-        if useNoUi:
 
-            # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
-            du_idt = np.zeros(u.shape)
+        # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
+        du_idt = p_unr * np.multiply(1 / T_infU, u) - np.multiply(1 / T_inf_Ui, u_i)
 
-            # Unreported recovered - account for duration of infectious periode
-            du_rdt = p_unr * np.multiply(1 / T_infU, u)
-        else:
-            # Unreported infected - infectious and not isolated (might know about symptoms, hence different R from U compartment)
-            du_idt = p_unr * np.multiply(1 / T_infU, u) - np.multiply(1 / T_inf_Ui, u_i)
-
-            # Unreported recovered - account for duration of infectious periode
-            du_rdt = np.multiply(1 / T_inf_Ui, u_i)
+        # Unreported recovered - account for duration of infectious periode
+        du_rdt = np.multiply(1 / T_inf_Ui, u_i)
 
         # output has to have shape
         if i_ind == 0:
