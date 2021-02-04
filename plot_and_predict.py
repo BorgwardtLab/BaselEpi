@@ -1,23 +1,87 @@
+#!/usr/bin/env python3
+#
+# This is script contains the evalaution and prediction functions
+
+### PACKAGES ###################################################################
+
+import datetime          as dt
+# import igraph            as ig
+import matplotlib.pyplot as plt
+import numpy             as np
+import os
+import pandas            as pd
+import pickle
+import random
+import shelve
+import sklearn
+from joblib import Parallel, delayed
+# import jenkspy
+
+# from IPython import embed
+from scipy.integrate import odeint
+from scipy.optimize import minimize
+from sklearn.metrics import r2_score
+from scipy.interpolate import interp1d
+from scipy.interpolate import UnivariateSpline
+from scipy import stats
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.cm as cmx
+
+### GLOBAL VARIABLE ############################################################
+global constantMobility
+constantMobility = False
+
+global zeroMobility
+zeroMobility = False
+
+global constantR
+constantR = False
+
+global fixedSocial
+fixedSocial = 1
+
+global time_dep_soc
+global randomIndex
+randomIndex = '001'
+
+
+# Paths and filenames to be included by user
+global filenameCaseData
+filenameCaseData = 'test.csv'
+
+global filenameKalmanData
+filenameKalmanData = 'test.csv'
+
+global filenameSocioeconomicData
+filenameSocioeconomicData = 'test.csv'
+
+global filenameMobilityData
+filenameMobilityData = 'test.csv'
+
+# Mobility graphs for each mode of transport of 'publ', 'bike', 'moto', 'foot' - one csv file each
+global filenameSocioeconomicGraphData
+filenameSocioeconomicGraphData = 'test'
+
+# Add all result files
+global result_file
+result_file   = 'results_test.pkl'
+
+global fixedPar_file
+fixedPar_file = 'fixedPars_test.pkl'
+
+
+
+
 def main():
     # Get social time series
-    delta_t = 14
-
-    df_timedep = pd.read_csv(os.path.join(wd, 'output', 'bs_full_traffic_model_timeseries.csv'))
-    n_travelling = df_timedep['total'].values[:-2]
-
-    # Starting 6.2. - relative to 7.3.
-    time = 7 * df_timedep.index.values[:-2] - 30 + delta_t
-    time_dep = UnivariateSpline(time, n_travelling)
-    time_dep.set_smoothing_factor(0.0001)
+    df_timedep = pd.read_csv(filenameMobilityData)
 
     # Get social time series
-    df_Kalman = pd.read_csv(os.path.join(wd, 'kalman', 'bs_kalman_Reff.csv'))
-    time_Kalman = np.arange(0, 57)  # df_Kalman['timestamp'].values
-    R_estimate = df_Kalman['R_estimate'].values
+    df_Kalman   = pd.read_csv(filenameKalmanData)
+    time_Kalman = df_Kalman['timestamp'].values
+    R_estimate  = df_Kalman['R_estimate'].values
 
-    if delta_t != 10:
-        R_estimate = np.array(list(R_estimate[0] * np.ones(delta_t - 10, )) + list(R_estimate))
-        time_Kalman = np.arange(0, len(R_estimate))
 
     global alpha_mob
     alpha_mob = time_dep(time_Kalman)
@@ -27,54 +91,41 @@ def main():
     global time_dep_soc
     time_dep_soc = UnivariateSpline(time_Kalman, y_soc, s=0.05)
 
-    # Plot mobility
-    fig1 = plt.figure(figsize=(6, 6))
-    ax = fig1.add_subplot()
-    plt.plot(time_Kalman, y_soc, '-', linewidth=2, label='social')
-    plt.plot(time_Kalman, alpha_mob, '-', linewidth=2, label='mobility')
-    plt.plot(time_Kalman, alpha_mob * y_soc, '-', linewidth=2, label='Product')
-    plt.xlabel('Day since 26.2.2020')
-    plt.ylabel('Interaction Fraction')
-    plt.legend()
 
-    # runIDs = ['Uncert_pfix0.92_Tinc2_2LivingSpace', 'Uncert_pfix0.92_Tinc2_2SENIOR_ANT',
-    #           'Uncert_pfix0.92_Tinc2_21PHouseholds','Uncert_pfix0.92_Tinc2_2MedianIncome2017']
-    runIDs = ['Final_uncert_20201204_newMedianIncome2017']
-    # ['Final_uncert_20201204_LivingSpace',
-    #       'Final_uncert_20201204_SENIOR_ANT',
-    #       'Final_uncert_20201204_1PHouseholds',
-    #       'Final_uncert_20201204_newMedianIncome2017']
+    # Loop over all runIDs
+    runIDs = ['yourRUNID_1', 'yourRUNID2']
+    names = ['NameRUNID_1','NameRUNID_2']
 
-    names = [
-        'Median income']  # ['Living space\nper person','Seniority','1-person\nhouseholds','Median income'] # '1P Households', 'Seniority',
-    # evalVaccination(runIDs, names)
-    # plotMobilityBarChart(runIDs, names)
     for i, id in enumerate(runIDs):
-        evalVaccination_new([id], [names[i]])
-        # evalVaccination_ICUoccupation([id], [names[i]])
-        # main_eval(id)
+        evalVaccination([id], [names[i]])
+        evalVaccination_ICUoccupation([id], [names[i]])
+        plot_results(id)
 
     return 0
 
 
 def evalVaccination_ICUoccupation(runIDs, names):
-    # general setup
-    vaccineGroup = [3, 1, 3, 1]
-    icu_stay = 5.9
-    vaccinateALLsenior = True
+
+    # Parameters to set
+    vaccineGroup = 3                    # select Tertile
+    fractions_vaccGroup = [0.3333333]   # Fraction of population vaccinated
+    effVacsGroup        = [0.9]         # Vaccine efficacy
+    icu_stay     = 5.9                  # Icu stay duration
+    icu_capa           = 44             # ICU capacity
+    icu_perc = 0.01                     # Propability for all infected cases to be on ICU
+    all_quat = [1, 2, 3]                # the summarized quaters of Basel to be analysed: choose from 1-9,'all'
+    vaccinateALLsenior = True           # If all senior citizens were vaccinated reduce ICU propability
     if vaccinateALLsenior:
         icu_perc2 = 0.005
     else:
-        icu_perc2 = 1 * 0.01
-    icu_perc = 1 * 0.01
-    mode = 'a'  # s: single, a: coupled
-    all_quat = [1, 2, 3]  # the summarized quaters of Basel to be analysed: choose from 1-9,'all'
-    colors = ['black', 'darkblue', 'gold', 'royalblue', 'orange', 'yellow']
-    fractions_vaccGroup = [0.3333333]
-    effVacsGroup = [0.9]
-    icu_capa = 44
-    n_adm = len(all_quat)
+        icu_perc2 = 0.01
+    t = list(np.arange(0, 150))         # Simualte for 150 days
 
+
+    # Plot colors
+    colors = ['black', 'darkblue', 'gold', 'royalblue', 'orange', 'yellow']
+
+    # Global parameters
     global constantR
     global constantMobility
     global zeroMobility
@@ -84,51 +135,28 @@ def evalVaccination_ICUoccupation(runIDs, names):
     counter = 0
     for i_q, run_ID in enumerate(runIDs):
 
-        # load data for this run
-        folder = os.path.join(wd, 'Results', run_ID, 'original')
-        files = os.listdir(folder)
-        for i, f in enumerate(files):
-            if f[0] == str(1) and f[-7:] == 'trn.csv':
-                df_trn = pd.read_csv(os.path.join(folder, f))
-                t_trn = df_trn['timestamp'].values
-            elif f[0] == str(1) and f[-7:] == 'tst.csv':
-                df_tst = pd.read_csv(os.path.join(folder, f))
-                t_tst = df_tst['timestamp'].values
-        t = list(np.arange(0, 150))
+        # load data and fit results for this run
+        infile = open(result_file, 'rb')
+        result = pickle.load(infile)
+        infile.close()
 
-        folder = os.path.join(wd, 'Results', run_ID, 'parameters')
-        files = os.listdir(folder)
-        for i, f in enumerate(files):
-            if f[-9:] == 'itted.pkl':
-                infile = open(os.path.join(folder, f), 'rb')
-                result = pickle.load(infile)
-                infile.close()
+        # load fixed parameter data
+        infile = open(fixedPar_file, 'rb')
+        fixed_pars = pickle.load(infile)
+        infile.close()
 
-            elif f[-9:] == 'fixed.pkl':
-                infile = open(os.path.join(folder, f), 'rb')
-                fixed_pars = pickle.load(infile)
-                infile.close()
-
-        # Get indices to use
-        R_initU_save = []
-        for j in range(0, len(result)):
-            R_initU_save.append(result[j].x[5 * n_adm])
-        df = pd.DataFrame(list(zip(R_initU_save)), columns=['Rstart'])
-        inds_skip = list(
-            np.where(df['Rstart'].values > np.mean(df['Rstart'].values) + 3 * np.std(df['Rstart'].values))[0])
-        inds_skip = inds_skip + list(
-            np.where(df['Rstart'].values < np.mean(df['Rstart'].values) - 3 * np.std(df['Rstart'].values))[0])
-
-        n_tot = np.sum(fixed_pars[6])
+        # Prepare parameters
+        n_tot        = np.sum(fixed_pars[6])
         n_vaccinated = fixed_pars[6][vaccineGroup[i_q] - 1]
-        f25 = fractions_vaccGroup[0] * n_tot / n_vaccinated
+        f25          = fractions_vaccGroup[0] * n_tot / n_vaccinated
         fractions_vacc_group = [f25]
-        fractions_vacc_all = [0, fractions_vaccGroup[0]]
+        fractions_vacc_all   = [0, fractions_vaccGroup[0]]
 
         for ev in range(0, len(effVacsGroup)):
             effVac = effVacsGroup[ev]
 
             if counter == 0:
+
                 # random distribution of vaccinated subjects
                 for i_fv, frac_vac in enumerate(fractions_vacc_all):
 
@@ -216,9 +244,9 @@ def evalVaccination_ICUoccupation(runIDs, names):
                 if frac_vac == 0 and ev > 0:
                     continue
 
-                mean_ninf = np.zeros((n_inf.shape[0],))
-                min_ninf = np.zeros((n_inf.shape[0],))
-                max_ninf = np.zeros((n_inf.shape[0],))
+                mean_ninf = np.zeros((len(t),))
+                min_ninf = np.zeros((len(t),))
+                max_ninf = np.zeros((len(t),))
                 for j in range(0, len(result)):
                     if np.isin(j, inds_skip):
                         continue
@@ -244,6 +272,7 @@ def evalVaccination_ICUoccupation(runIDs, names):
                 # Average over boot straps
                 mean_ninf = mean_ninf / (len(result) - len(inds_skip))
 
+                # Get 50% ICU occupancy mark
                 yV2_int = interp1d(t, mean_ninf)
                 cases = []
                 for it in range(0, len(t) - int(round(icu_stay))):
@@ -254,6 +283,7 @@ def evalVaccination_ICUoccupation(runIDs, names):
                 yV2 = 50  #
                 xV2 = yV2_int_cases(50)
 
+                # Plot
                 if frac_vac == 0:
                     ax.plot(np.arange(len(cases)), 100 * np.array(cases) / icu_capa, '-', linewidth=2,
                             color=colors[counter], zorder=12, label='V0 - no vaccine')
@@ -277,11 +307,11 @@ def evalVaccination_ICUoccupation(runIDs, names):
                                 label='V3 - ' + f"{fractions_vaccGroup[0] * 100:.0f}" + '% from T' + str(
                                     vaccineGroup[i_q]) + "\n" + names[i_q])
 
+                # Bootstrap bands
                 cases_min = []
                 cases_max = []
                 yV0_int_min = interp1d(t, min_ninf)
                 yV0_int_max = interp1d(t, max_ninf)
-                cases = []
                 for it in range(0, len(t) - int(round(icu_stay))):
                     cases_min.append((yV0_int_min(it + icu_stay) - yV0_int_min(it)) * icu_perc2)
                     cases_max.append((yV0_int_max(it + icu_stay) - yV0_int_max(it)) * icu_perc2)
@@ -304,43 +334,33 @@ def evalVaccination_ICUoccupation(runIDs, names):
     plt.ylabel('ICU Occupancy [%]', fontsize=14)
     ax.patch.set_facecolor('lightgrey')
     plt.grid(color='white')
-    # plt.hlines(y=50, xmin = 0, xmax =len(cases_min), linestyles = 'solid', color = 'darkorange')
     plt.scatter(xV0, yV0, color='black', marker='o', s=50, zorder=20)
     plt.scatter(xV1, yV1, color='darkblue', marker='o', s=50, zorder=20)
     plt.scatter(xV2, yV2, color='red', marker='o', s=50, zorder=20)
     plt.tight_layout()
 
-    os.chdir(os.path.join(wd, 'Results', run_ID, 'figures'))
-    fig1.savefig('vaccineoneGroup_T' + str(vaccineGroup[i_q]) + '_ICUocc_mixed_all.png', dpi=250)
-    fig1.savefig('vaccineoneGroup_T' + str(vaccineGroup[i_q]) + '_ICUocc_mixed_all.pdf', format='pdf')
-    os.chdir(wd)
-
-    print(xV0)
-    print(xV1)
-    print(xV2)
-    print(yV0)
-    print(yV1)
-    print(yV2)
-
     return 0
 
+def evalVaccination(runIDs, names):
 
-def evalVaccination_new(runIDs, names):
-    # general setup
-    vaccineGroup = [1, 1, 3, 1]
-    icu_stay = 5.9
-    vaccinateALLsenior = False
+
+    # Parameters to set
+    vaccineGroup = 3                    # select Tertile
+    fractions_vaccGroup = [0.3333333]   # Fraction of population vaccinated
+    effVacsGroup = [0.9]                # Vaccine efficacy
+    icu_stay = 5.9                      # Icu stay duration
+    icu_capa = 44                       # ICU capacity
+    icu_perc = 0.01                     # Propability for all infected cases to be on ICU
+    all_quat = [1, 2, 3]                # the summarized quaters of Basel to be analysed: choose from 1-9,'all'
+    vaccinateALLsenior = True           # If all senior citizens were vaccinated reduce ICU propability
     if vaccinateALLsenior:
         icu_perc2 = 0.005
     else:
-        icu_perc2 = 1 * 0.01
-    icu_perc = 1 * 0.01
-    mode = 'a'  # s: single, a: coupled
-    all_quat = [1, 2, 3]  # the summarized quaters of Basel to be analysed: choose from 1-9,'all'
+        icu_perc2 = 0.01
+    t = list(np.arange(0, 150))         # Simualte for 150 days
+
+
     colors = ['black', 'darkblue', 'gold', 'royalblue', 'orange', 'yellow']
-    fractions_vaccGroup = [0.3333333]
-    effVacsGroup = [0.9]
-    icu_capa = 44
     n_adm = len(all_quat)
 
     global constantR
@@ -616,8 +636,7 @@ def evalVaccination_new(runIDs, names):
 
     return 0
 
-
-def main_eval(run_ID):
+def plot_results(run_ID):
     # run_ID = '3tiles_SENIOR_ANT_s1_unc50_Per'
     print(run_ID)
 
