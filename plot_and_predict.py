@@ -135,12 +135,12 @@ def evalVaccination_ICUoccupation(runIDs, names):
     counter = 0
     for i_q, run_ID in enumerate(runIDs):
 
-        # load data and fit results for this run
+        # load graphs and fit results for this run
         infile = open(result_file, 'rb')
         result = pickle.load(infile)
         infile.close()
 
-        # load fixed parameter data
+        # load fixed parameter graphs
         infile = open(fixedPar_file, 'rb')
         fixed_pars = pickle.load(infile)
         infile.close()
@@ -372,7 +372,7 @@ def evalVaccination(runIDs, names):
     counter = 0
     for i_q, run_ID in enumerate(runIDs):
 
-        # load data for this run
+        # load graphs for this run
         folder = os.path.join(wd, 'Results', run_ID, 'original')
         files = os.listdir(folder)
         for i, f in enumerate(files):
@@ -682,7 +682,7 @@ def plot_results(run_ID):
     else:
         n_adm = len(all_quat)
 
-    # load data for this run
+    # load graphs for this run
     folder = os.path.join(wd, 'Results', run_ID, 'parameters')
     files = os.listdir(folder)
     for i, f in enumerate(files):
@@ -751,7 +751,7 @@ def plot_results(run_ID):
     normalizationF = np.zeros((len(all_quat), 1))
     for q in all_quat:
 
-        # Get data
+        # Get graphs
         for i, f in enumerate(files):
             if f[0] == str(q) and f[-7:] == 'trn.csv':
                 df_trn = pd.read_csv(os.path.join(folder, f))
@@ -1645,9 +1645,9 @@ def plot_SEUI_load(t_trn, real_cuminf_trn, mdl_cuminf, mdl_asi, mdl_e, pop, resu
     for i in range(2):
         ax = fig1.add_subplot(1, 2, i + 1)
         ax.plot(t_trn, real_cuminf_trn, 'gray', marker='o', markersize=3, \
-                label='confirmed cases (data)')
+                label='confirmed cases (graphs)')
         # ax.plot(t_trn,real_fat_trn,'red',marker='o',markersize=3,\
-        #      label='deceased (data)')
+        #      label='deceased (graphs)')
         ax.plot(t_trn, mdl_cuminf[:len(t_trn)], 'gray', \
                 label='confirmed infected cases (model)')
         ax.plot(t_trn, mdl_asi[:len(t_trn)], 'blue', \
@@ -1674,7 +1674,7 @@ def plot_SEUI_load(t_trn, real_cuminf_trn, mdl_cuminf, mdl_asi, mdl_e, pop, resu
     fig2 = plt.figure(figsize=(12, 6))
 
     # ax1  = fig2.add_subplot(121)
-    # ax1.plot(t_trn,real_fat_trn,'red',marker='o',label='deceased (data)')
+    # ax1.plot(t_trn,real_fat_trn,'red',marker='o',label='deceased (graphs)')
     # ax1.plot(t_trn,mdl_fat[:len(t_trn)],'r',label='deceased (model)')
     # ax1.plot(t_tst,mdl_fat[len(t_trn):],'black' )
     # ax1.plot(t_tst,real_fat_tst,'ko' )

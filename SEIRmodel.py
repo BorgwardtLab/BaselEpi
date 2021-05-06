@@ -86,7 +86,7 @@ def main():
     seedQuarter = 1  # The quarter with the first case
 
     # Socioeconomic 'quarters'
-    n_splitsSoc = 3  # number of splits for the socioeconomic data. Choose from 3 to 9, one section for 'NaN'
+    n_splitsSoc = 3  # number of splits for the socioeconomic graphs. Choose from 3 to 9, one section for 'NaN'
     all_quat = list(np.arange(1, n_splitsSoc + 1))
 
     # initial values and constaints - separate depending on model chosen
@@ -381,18 +381,18 @@ def run_model(quat, newdir, start, end, uncert, n_uncert, useparallel,
     print(bnds)
     print(par_list)
 
-    # Fit (optionally with uncertainty in data)
+    # Fit (optionally with uncertainty in graphs)
     result = []
     fit = []
     data_in = [data_trn]
     if uncert:
 
-        # Fit (optionally with uncertainty in data)
+        # Fit (optionally with uncertainty in graphs)
         t_in = [t_trn]
         data_in = [data_trn]
         r2s = [0]
 
-        # First run once with undisturbed data
+        # First run once with undisturbed graphs
         result_i, t_i, fit_i = fit_general(par_list, data_in[0], bnds, fixed_pars, t_in[0], t_tst)
         result = [result_i]
         fit = [fit_i]
@@ -437,11 +437,11 @@ def run_model(quat, newdir, start, end, uncert, n_uncert, useparallel,
         bnds_uncert[10 * n_adm + 4] = (fit_TinfUi, fit_TinfUi)
         bnds_uncert = tuple(bnds_uncert)
 
-        # Now repeat with disturbed data for the specified number of runs - only keep runs with a minimum goodness of fit
+        # Now repeat with disturbed graphs for the specified number of runs - only keep runs with a minimum goodness of fit
         input = [data_trn, t_trn, par_list_uncert, bnds_uncert, fixed_pars, t_tst, inds_s10, rmse, mean_points]
         if not useparallel:
             for i in range(1, n_uncert + 1):
-                # Randomly shift data
+                # Randomly shift graphs
                 out = uncertFit(input + [i])
 
                 data_in[i] = out[1]
@@ -502,7 +502,7 @@ def run_model(quat, newdir, start, end, uncert, n_uncert, useparallel,
     return 0
 
 
-# Load data
+# Load graphs
 def setup(quarter, start, end, n_adm):
     """Does the general setup based on user input.
 
@@ -512,7 +512,7 @@ def setup(quarter, start, end, n_adm):
     coupled : switches coupling on or off
     local   : switches locality of parameters rates on or off
     t_meas  : time at which interventions are modeled to takle place
-    n_tst   : length of test data set
+    n_tst   : length of test graphs set
     start   : start date of analysis
     end     : end date of analysis
     mode    : include (s)ingle node only or (a)ll nodes
@@ -526,8 +526,8 @@ def setup(quarter, start, end, n_adm):
     n_adm    : number of areas to be considered
     t_trn    : vector with time points considered for training
     t_tst    : vector with time points for testing
-    data_trn : data matrix to be passed to the optimization function
-    data_tst : data matrix for testing the fitted model
+    data_trn : graphs matrix to be passed to the optimization function
+    data_tst : graphs matrix for testing the fitted model
     admo     :
     """
     # number of compartments, 5 for S, E, I, R, D
@@ -556,7 +556,7 @@ def setup(quarter, start, end, n_adm):
     global time_dep_soc
     time_dep_soc = UnivariateSpline(time_Kalman, y_soc, s=0.03)
 
-    # parse the input data
+    # parse the input graphs
     t_trn, data_trn, pop = obtain_data_ILGE(quarter, n_adm, start, end)
 
     # obtain adjacency matrix and number of admin areas analyzed
@@ -571,7 +571,7 @@ def obtain_data_ILGE(quarter, n_adm, start, end):
     Parameters
     ----------
     quarter : list of quaters
-    n_tst : negative integer which specifies length of test data set
+    n_tst : negative integer which specifies length of test graphs set
     n_adm : number of considered admin areas
     start : start date of analysis
     end   : end date of analysis
@@ -580,8 +580,8 @@ def obtain_data_ILGE(quarter, n_adm, start, end):
     -------
     t_trn    : vector with time points considered for training
     t_tst    : vector with time points for testing
-    data_trn : data matrix to be passed to the optimization function
-    data_tst : data to be reserved to test the fitted model
+    data_trn : graphs matrix to be passed to the optimization function
+    data_tst : graphs to be reserved to test the fitted model
     pop      : population per each area
     """
 
@@ -607,7 +607,7 @@ def obtain_data_ILGE(quarter, n_adm, start, end):
     inf_trn = data_inf_trn.reshape(n_adm, len(t_trn))
     inf_trn_cum = data_inf_trn_cum.reshape(n_adm, len(t_trn))
 
-    # Impute missing data for the 29, 30, 31 of march
+    # Impute missing graphs for the 29, 30, 31 of march
     inds_missing = [36, 37, 38]
     inds_forRatio = [33, 34, 35, 19, 40, 41]
     ratioT = (inf_trn_cum / np.sum(inf_trn_cum, axis=0))[:, inds_forRatio].mean(axis=1)
@@ -657,9 +657,9 @@ def load_data(the_quarter, start, end):
 
     Returns
     --------
-    data matrix with time, n_infected; and population for selected areas
+    graphs matrix with time, n_infected; and population for selected areas
 
-    This function needs to be adjusted to hande your specific data set
+    This function needs to be adjusted to hande your specific graphs set
     '''
     global randomIndex
     global ratio_time_dep
@@ -685,13 +685,13 @@ def load_data(the_quarter, start, end):
     df['DELTA'] = tmp.astype('timedelta64[D]')
     t = np.arange(df['DELTA'].max())
 
-    # Get all population data
-    os.chdir(os.path.join(wd, 'geodata'))
+    # Get all population graphs
+    os.chdir(os.path.join(wd, 'Results'))
     filename = 'SocioeconomicScore_data.csv'
     pop_df = pd.read_csv(filename)
     os.chdir(wd)
 
-    # Get socioeconomic data
+    # Get socioeconomic graphs
     name_suffix = 'percentiles'
     os.chdir(os.path.join(wd, 'graphs'))
     filename = 'bs_' + useForTiles + '_' + str(n_splitsSoc) + name_suffix + '.csv'
@@ -699,7 +699,7 @@ def load_data(the_quarter, start, end):
     os.chdir(wd)
 
     # Get total number of inhabitants
-    os.chdir(os.path.join(wd, 'geodata'))
+    os.chdir(os.path.join(wd, 'Results'))
     filename = 'bs_quarter_mapping_all.csv'
     pop_tot_df = pd.read_csv(filename)
     os.chdir(wd)
@@ -716,7 +716,7 @@ def load_data(the_quarter, start, end):
         # Get population
         pop = pop_df['Population 2017'].loc[pop_df['BlockID'].isin(blocks)].sum()
 
-    # Subset the case data
+    # Subset the case graphs
     df = df[df['Block ID'].isin(list(blocks))]
     print(str(the_quarter) + " has a total of " + str(df.shape[0]) + ' cases')
 
@@ -732,7 +732,7 @@ def load_data(the_quarter, start, end):
 
     y_inf = np.cumsum(y_new_inf)
 
-    # So far no data for fatalities
+    # So far no graphs for fatalities
     y_dead = []
 
     # Summarize
@@ -748,7 +748,7 @@ def load_data(the_quarter, start, end):
 def obtain_adjacencyILGE(quarter):
     global useForTiles
 
-    # Load mobility data for each transport mode, sum all
+    # Load mobility graphs for each transport mode, sum all
     transport_means = ['publ', 'bike', 'moto', 'foot']
     for i, tr in enumerate(transport_means):
 
@@ -1104,12 +1104,12 @@ def dofit_SEUI(par_list, data_train, bnds, fixed_pars):
 
 
 def residual_SEUI_parallel(pars, data, fixed_pars, adm0):
-    '''Computes residuals of the data with respect to fitted model
+    '''Computes residuals of the graphs with respect to fitted model
 
     Parameters
     -----------
     pars       : initial conditions and parameter values to be optimized
-    data       : array containing the training data
+    data       : array containing the training graphs
     fixed_pars : fixed parameters
     adm0       : iso3 pcode of country of interest
 
@@ -1144,12 +1144,12 @@ def residual_SEUI_parallel(pars, data, fixed_pars, adm0):
 
 
 def residual_SEUI(pars, data, fixed_pars):
-    '''Computes residuals of the data with respect to fitted model
+    '''Computes residuals of the graphs with respect to fitted model
 
     Parameters
     -----------
     pars       : initial conditions and parameter values to be optimized
-    data       : array containing the training data
+    data       : array containing the training graphs
     fixed_pars : fixed parameters
     adm0       : iso3 pcode of country of interest
 
@@ -1222,7 +1222,7 @@ def uncertFit(input):
 
         np.random.seed(rand_seed + counter * 50)
 
-        # Randomly shift data for each quarter
+        # Randomly shift graphs for each quarter
         data_new = data_trn.copy()
         plt.figure()
         for i in range(0, n_adm):

@@ -30,8 +30,8 @@ from tqdm import tqdm
 ### GLOBAL VARIABLES ##########################################################
 
 main_dir = os.getcwd()
-data_dir = 'geodata/'
-shape_dir = '../../../data/shapefiles/GeodatenBS_20200605/'
+data_dir = 'Results/'
+shape_dir = '../../../graphs/shapefiles/GeodatenBS_20200605/'
 graph_dir = 'graphs/'
 figure_dir = '../../../figures/'
 out_dir = 'output/'
@@ -153,7 +153,7 @@ def bootstrap_partitions(n_tiles, n_partitions):
 
 
 def build_areas(n, criterion, mode):
-    # load socio-economic data and block shapes
+    # load socio-economic graphs and block shapes
     block_gdf = load_shp('Block')
     block_gdf.BLO_ID = block_gdf.BLO_ID.astype(int)
     socio_df = load_data(criterion)

@@ -32,10 +32,10 @@ from tqdm import tqdm
 
 main_dir = os.getcwd()
 sbbbvb_dir = 'SBB Data'
-tmsrs_dir = '../../../data/shapefiles/'
-shape_dir = '../../../data/shapefiles/GeodatenBS_20200605/Wohnviertel/'
-trans_dir = '../../../data/BS_Vehrkersdepartement_Redle/2020_08_12_Aggregierte_Matrizen_GVM_Region_Basel/Gebietseinteilung_frei/Matrizen_CbyC/'
-zone_dir = '../../../data/BS_Vehrkersdepartement_Redle/2020_07_17_Daten_GVM_Region_Basel/'
+tmsrs_dir = '../../../graphs/shapefiles/'
+shape_dir = '../../../graphs/shapefiles/GeodatenBS_20200605/Wohnviertel/'
+trans_dir = '../../../graphs/BS_Vehrkersdepartement_Redle/2020_08_12_Aggregierte_Matrizen_GVM_Region_Basel/Gebietseinteilung_frei/Matrizen_CbyC/'
+zone_dir = '../../../graphs/BS_Vehrkersdepartement_Redle/2020_07_17_Daten_GVM_Region_Basel/'
 graph_dir = 'graphs/'
 figure_dir = '../../../figures/'
 output_dir = 'output'
@@ -182,7 +182,7 @@ def compile_total_ts(criterion, mode, n):
     ax1 = fig.add_subplot(111)
     plt.plot(ts_df.total / ts_df.total.max(), label='privat')
 
-    # load BVB data
+    # load BVB graphs
     os.chdir(sbbbvb_dir)
     df = pd.read_csv('BVB_Fahrgastzahlen.csv')
     df.columns = ['date', 'total', 'week']
