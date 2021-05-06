@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # coding=utf-8
 #
-# This is a simple copmpartmental epidemiology model (SEIRD-model) describing
-# the evolution of susceptible, exposed, infected, recovered and deceased
-# population sizes.
+# This is a simple copmpartmental epidemiology model (SEIR-model) describing
+# the evolution of susceptible, exposed, infected, and recovered population sizes.
 
 ### PACKAGES ###################################################################
 import datetime          as dt
