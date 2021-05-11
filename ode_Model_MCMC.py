@@ -270,7 +270,7 @@ def newfit():
                     this_pars['R_T2'] = out.params['R_T2_MedInc']
                     this_pars['R_T3'] = out.params['R_T3_MedInc']
                 elif i_data == 1:
-                    this_pars['seed'] = 1
+                    this_pars['seed'] = 0
                     this_pars['R_T1'] = out.params['R_T1_Liv']
                     this_pars['R_T2'] = out.params['R_T2_Liv']
                     this_pars['R_T3'] = out.params['R_T3_Liv']
@@ -561,7 +561,7 @@ def newfit():
                         this_pars['R_T3'] = df_params['R_T3_MedInc'].values[ind]
                     elif i_data == 1:
                         the_title = 'Living Space'
-                        this_pars['seed'] = 1
+                        this_pars['seed'] = 0
                         this_pars['R_T1'] = df_params['R_T1_Liv'].values[ind]
                         this_pars['R_T2'] = df_params['R_T2_Liv'].values[ind]
                         this_pars['R_T3'] = df_params['R_T3_Liv'].values[ind]
@@ -766,8 +766,8 @@ def newfit():
                         this_pars['R_T2'] = df_params['R_T2_MedInc'].values[ind]
                         this_pars['R_T3'] = df_params['R_T3_MedInc'].values[ind]
                     elif i_data == 1:
-                        the_title = '1P-Household'
-                        this_pars['seed'] = 1
+                        the_title = 'Living Space'
+                        this_pars['seed'] = 0
                         this_pars['R_T1'] = df_params['R_T1_Liv'].values[ind]
                         this_pars['R_T2'] = df_params['R_T2_Liv'].values[ind]
                         this_pars['R_T3'] = df_params['R_T3_Liv'].values[ind]
